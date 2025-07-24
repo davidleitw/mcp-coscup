@@ -1,0 +1,31 @@
+# Build artifacts
+bin/
+*.exe
+
+# Test files
+*_test.go
+test_*.go
+
+# Documentation
+README.md
+LICENSE
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Other
+crawler/
+*.log
