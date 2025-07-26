@@ -41,10 +41,9 @@ func handleStartPlanning(ctx context.Context, request mcp.CallToolRequest) (*mcp
 
 	callReason := request.GetString("callReason", "")
 
-	// Generate a simple session ID
-	sessionID := fmt.Sprintf("user_%s_%d",
-		map[string]string{"Aug9": "09", "Aug10": "10"}[day],
-		len(userStates)+1)
+	// Generate a secure session ID
+	dayCode := map[string]string{"Aug9": "09", "Aug10": "10"}[day]
+	sessionID := GenerateSessionIDWithCollisionCheck(dayCode)
 
 	// Convert day format and create new user state
 	internalDay := convertDayFormat(day)

@@ -56,26 +56,6 @@ func LoadCOSCUPData() error {
 	return nil
 }
 
-// FindSessionsAfter returns sessions that start after the given time on the given day
-func FindSessionsAfter(day, afterTime string) []Session {
-	if !sessionsLoaded {
-		if err := LoadCOSCUPData(); err != nil {
-			return nil
-		}
-	}
-
-	var result []Session
-	afterMinutes := timeToMinutes(afterTime)
-
-	for _, session := range sessionsByDay[day] {
-		startMinutes := timeToMinutes(session.Start)
-		if startMinutes >= afterMinutes {
-			result = append(result, session)
-		}
-	}
-
-	return result
-}
 
 // FindSessionByCode finds a session by its code
 func FindSessionByCode(code string) *Session {
@@ -155,22 +135,3 @@ func convertDayFormat(userDay string) string {
 }
 
 
-// GetAllTracks returns all unique tracks
-func GetAllTracks() []string {
-	if !sessionsLoaded {
-		if err := LoadCOSCUPData(); err != nil {
-			return nil
-		}
-	}
-
-	trackSet := make(map[string]bool)
-	for _, session := range allSessions {
-		trackSet[session.Track] = true
-	}
-
-	var tracks []string
-	for track := range trackSet {
-		tracks = append(tracks, track)
-	}
-	return tracks
-}

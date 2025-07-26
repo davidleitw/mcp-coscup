@@ -75,14 +75,11 @@ func (s *COSCUPServer) startCleanupRoutine() {
 	ticker := time.NewTicker(1 * time.Hour) // cleanup every hour
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			log.Println("🧹 Running session cleanup...")
-			CleanupOldSessions()
-			stats := GetSessionStats()
-			log.Printf("📊 Active sessions: %v", stats["active_sessions"])
-		}
+	for range ticker.C {
+		log.Println("🧹 Running session cleanup...")
+		CleanupOldSessions()
+		stats := GetSessionStats()
+		log.Printf("📊 Active sessions: %v", stats["active_sessions"])
 	}
 }
 
