@@ -6,8 +6,8 @@
 set -e  # 如果任何命令失敗就退出
 
 # 設定變數
-MCP_NAME="coscup-arranger"
-BINARY_PATH="$(pwd)/bin/coscup-mcp-server"
+MCP_NAME="mcp-coscup"
+BINARY_PATH="$(pwd)/bin/mcp-coscup"
 SCOPE="user"  # user | local | project
 
 # 顏色輸出

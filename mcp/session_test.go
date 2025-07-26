@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 	"time"
-	"coscup-mcp-server/mcp/testutil"
+	"mcp-coscup/mcp/testutil"
 )
 
 // Tests for functions in session.go

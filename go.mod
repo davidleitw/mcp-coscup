@@ -1,4 +1,4 @@
-module coscup-mcp-server
+module mcp-coscup
 
 go 1.23.2
 

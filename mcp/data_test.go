@@ -2,7 +2,7 @@ package mcp
 
 import (
 	"testing"
-	"coscup-mcp-server/mcp/testutil"
+	"mcp-coscup/mcp/testutil"
 )
 
 // Tests for functions in data.go

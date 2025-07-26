@@ -1,10 +1,10 @@
 # COSCUP MCP Server Makefile
 
 # 變數定義
-BINARY_NAME=coscup-mcp-server
+BINARY_NAME=mcp-coscup
 MAIN_PATH=./cmd/server
 BUILD_DIR=bin
-DOCKER_TAG=coscup-mcp-server
+DOCKER_TAG=mcp-coscup
 
 # 預設目標
 .PHONY: all

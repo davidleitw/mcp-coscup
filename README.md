@@ -1,2 +1,2 @@
-# coscup-arranger
+# mcp-coscup
 A wonderful COSCUP experience!

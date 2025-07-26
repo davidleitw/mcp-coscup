@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"coscup-mcp-server/mcp"
+	"mcp-coscup/mcp"
 )
 
 func main() {
