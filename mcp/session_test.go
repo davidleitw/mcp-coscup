@@ -1220,3 +1220,600 @@ func TestFinishPlanningWithDifferentScheduleSizes(t *testing.T) {
 		})
 	}
 }
+
+// Room Schedule Tests
+
+func TestFindRoomSessions(t *testing.T) {
+	// Mock session data for testing
+	originalSessionsByDay := sessionsByDay
+	originalSessionsLoaded := sessionsLoaded
+	
+	// Setup test data
+	sessionsByDay = map[string][]Session{
+		"Aug.9": {
+			{
+				Code:  "TR211-001",
+				Title: "AI Session 1",
+				Start: "09:00",
+				End:   "09:30",
+				Room:  "TR211",
+				Track: "AI",
+			},
+			{
+				Code:  "TR211-002", 
+				Title: "AI Session 2",
+				Start: "10:00",
+				End:   "10:30",
+				Room:  "TR211",
+				Track: "AI",
+			},
+			{
+				Code:  "RB105-001",
+				Title: "Database Session",
+				Start: "09:15",
+				End:   "09:45",
+				Room:  "RB-105",
+				Track: "Database",
+			},
+			{
+				Code:  "TR211-003",
+				Title: "AI Session 3",
+				Start: "11:00",
+				End:   "11:30",
+				Room:  "TR211",
+				Track: "AI",
+			},
+		},
+		"Aug.10": {
+			{
+				Code:  "TR211-004",
+				Title: "ML Session",
+				Start: "09:00",
+				End:   "09:30",
+				Room:  "TR211",
+				Track: "ML",
+			},
+		},
+	}
+	sessionsLoaded = true
+	
+	// Restore original data after test
+	defer func() {
+		sessionsByDay = originalSessionsByDay
+		sessionsLoaded = originalSessionsLoaded
+	}()
+	
+	tests := []struct {
+		name          string
+		day           string
+		room          string
+		expectedCount int
+		expectedOrder []string
+		description   string
+	}{
+		{
+			name:          "TR211 on Aug.9",
+			day:           "Aug.9",
+			room:          "TR211",
+			expectedCount: 3,
+			expectedOrder: []string{"TR211-001", "TR211-002", "TR211-003"},
+			description:   "Should return all TR211 sessions sorted by time",
+		},
+		{
+			name:          "RB-105 on Aug.9",
+			day:           "Aug.9",
+			room:          "RB-105",
+			expectedCount: 1,
+			expectedOrder: []string{"RB105-001"},
+			description:   "Should return single RB-105 session",
+		},
+		{
+			name:          "TR211 on Aug.10",
+			day:           "Aug.10",
+			room:          "TR211",
+			expectedCount: 1,
+			expectedOrder: []string{"TR211-004"},
+			description:   "Should return TR211 session on different day",
+		},
+		{
+			name:          "Non-existent room",
+			day:           "Aug.9",
+			room:          "NONEXISTENT",
+			expectedCount: 0,
+			expectedOrder: []string{},
+			description:   "Should return empty for non-existent room",
+		},
+		{
+			name:          "Non-existent day",
+			day:           "Aug.11",
+			room:          "TR211",
+			expectedCount: 0,
+			expectedOrder: []string{},
+			description:   "Should return empty for non-existent day",
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FindRoomSessions(tt.day, tt.room)
+			
+			testutil.AssertEqual(t, tt.expectedCount, len(result), tt.description)
+			
+			// Check order if we have sessions
+			for i, expectedCode := range tt.expectedOrder {
+				if i < len(result) {
+					testutil.AssertEqual(t, expectedCode, result[i].Code, 
+						fmt.Sprintf("Session %d should have code %s", i, expectedCode))
+				}
+			}
+			
+			// Verify sessions are sorted by start time
+			for i := 1; i < len(result); i++ {
+				prevStartMin := timeToMinutes(result[i-1].Start)
+				currStartMin := timeToMinutes(result[i].Start)
+				testutil.AssertEqual(t, true, prevStartMin <= currStartMin, 
+					"Sessions should be sorted by start time")
+			}
+			
+			// Verify all returned sessions are for the correct room
+			for _, session := range result {
+				testutil.AssertEqual(t, tt.room, session.Room, 
+					"All sessions should be for the specified room")
+			}
+		})
+	}
+}
+
+func TestGetCurrentRoomSession(t *testing.T) {
+	// Setup test data
+	testSessions := []Session{
+		{
+			Code:  "CURRENT-001",
+			Title: "Morning Session",
+			Start: "09:00",
+			End:   "09:30",
+			Room:  "TEST-ROOM",
+		},
+		{
+			Code:  "CURRENT-002",
+			Title: "Mid Session", 
+			Start: "10:00",
+			End:   "10:30",
+			Room:  "TEST-ROOM",
+		},
+		{
+			Code:  "CURRENT-003",
+			Title: "Afternoon Session",
+			Start: "14:00",
+			End:   "14:30",
+			Room:  "TEST-ROOM",
+		},
+	}
+	
+	// Mock FindRoomSessions to return our test data
+	originalSessionsByDay := sessionsByDay
+	originalSessionsLoaded := sessionsLoaded
+	
+	sessionsByDay = map[string][]Session{
+		"TestDay": testSessions,
+	}
+	sessionsLoaded = true
+	
+	defer func() {
+		sessionsByDay = originalSessionsByDay
+		sessionsLoaded = originalSessionsLoaded
+	}()
+	
+	tests := []struct {
+		name         string
+		currentTime  string
+		expectedCode string
+		expectNil    bool
+		description  string
+	}{
+		{
+			name:         "During first session",
+			currentTime:  "09:15",
+			expectedCode: "CURRENT-001",
+			expectNil:    false,
+			description:  "Should find current session when time is within range",
+		},
+		{
+			name:         "At exact start time",
+			currentTime:  "10:00",
+			expectedCode: "CURRENT-002",
+			expectNil:    false,
+			description:  "Should include session that starts at exact current time",
+		},
+		{
+			name:         "At exact end time",
+			currentTime:  "09:30",
+			expectedCode: "",
+			expectNil:    true,
+			description:  "Should not include session at exact end time",
+		},
+		{
+			name:         "Between sessions",
+			currentTime:  "09:45",
+			expectedCode: "",
+			expectNil:    true,
+			description:  "Should return nil when between sessions",
+		},
+		{
+			name:         "Before any session",
+			currentTime:  "08:30",
+			expectedCode: "",
+			expectNil:    true,
+			description:  "Should return nil when before any session",
+		},
+		{
+			name:         "After all sessions",
+			currentTime:  "15:00",
+			expectedCode: "",
+			expectNil:    true,
+			description:  "Should return nil when after all sessions",
+		},
+		{
+			name:         "During afternoon session",
+			currentTime:  "14:15",
+			expectedCode: "CURRENT-003",
+			expectNil:    false,
+			description:  "Should find afternoon session",
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetCurrentRoomSession("TEST-ROOM", "TestDay", tt.currentTime)
+			
+			if tt.expectNil {
+				testutil.AssertEqual(t, (*Session)(nil), result, tt.description)
+			} else {
+				testutil.AssertNotNil(t, result, tt.description)
+				testutil.AssertEqual(t, tt.expectedCode, result.Code, 
+					"Should return session with correct code")
+			}
+		})
+	}
+}
+
+func TestGetNextRoomSession(t *testing.T) {
+	// Setup test data
+	testSessions := []Session{
+		{
+			Code:  "NEXT-001",
+			Title: "Morning Session",
+			Start: "09:00",
+			End:   "09:30",
+			Room:  "TEST-ROOM",
+		},
+		{
+			Code:  "NEXT-002",
+			Title: "Mid Session",
+			Start: "10:00", 
+			End:   "10:30",
+			Room:  "TEST-ROOM",
+		},
+		{
+			Code:  "NEXT-003",
+			Title: "Afternoon Session",
+			Start: "14:00",
+			End:   "14:30",
+			Room:  "TEST-ROOM",
+		},
+	}
+	
+	// Mock FindRoomSessions
+	originalSessionsByDay := sessionsByDay
+	originalSessionsLoaded := sessionsLoaded
+	
+	sessionsByDay = map[string][]Session{
+		"TestDay": testSessions,
+	}
+	sessionsLoaded = true
+	
+	defer func() {
+		sessionsByDay = originalSessionsByDay
+		sessionsLoaded = originalSessionsLoaded
+	}()
+	
+	tests := []struct {
+		name         string
+		currentTime  string
+		expectedCode string
+		expectNil    bool
+		description  string
+	}{
+		{
+			name:         "Before first session",
+			currentTime:  "08:30",
+			expectedCode: "NEXT-001",
+			expectNil:    false,
+			description:  "Should return first session when before all",
+		},
+		{
+			name:         "During first session",
+			currentTime:  "09:15",
+			expectedCode: "NEXT-002",
+			expectNil:    false,
+			description:  "Should return next session when during current",
+		},
+		{
+			name:         "Between first and second",
+			currentTime:  "09:45",
+			expectedCode: "NEXT-002",
+			expectNil:    false,
+			description:  "Should return next session when in gap",
+		},
+		{
+			name:         "At exact start time",
+			currentTime:  "10:00",
+			expectedCode: "NEXT-003",
+			expectNil:    false,
+			description:  "Should return session after the one starting now",
+		},
+		{
+			name:         "During mid session",
+			currentTime:  "10:15",
+			expectedCode: "NEXT-003",
+			expectNil:    false,
+			description:  "Should return afternoon session",
+		},
+		{
+			name:         "Between mid and afternoon",
+			currentTime:  "12:00",
+			expectedCode: "NEXT-003",
+			expectNil:    false,
+			description:  "Should return afternoon session from large gap",
+		},
+		{
+			name:         "During last session",
+			currentTime:  "14:15",
+			expectedCode: "",
+			expectNil:    true,
+			description:  "Should return nil when in last session",
+		},
+		{
+			name:         "After all sessions",
+			currentTime:  "15:00",
+			expectedCode: "",
+			expectNil:    true,
+			description:  "Should return nil when after all sessions",
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetNextRoomSession("TEST-ROOM", "TestDay", tt.currentTime)
+			
+			if tt.expectNil {
+				testutil.AssertEqual(t, (*Session)(nil), result, tt.description)
+			} else {
+				testutil.AssertNotNil(t, result, tt.description)
+				testutil.AssertEqual(t, tt.expectedCode, result.Code,
+					"Should return session with correct code")
+			}
+		})
+	}
+}
+
+func TestRoomScheduleEdgeCases(t *testing.T) {
+	// Test edge cases for room schedule functions
+	
+	// Test with empty session data
+	originalSessionsByDay := sessionsByDay
+	originalSessionsLoaded := sessionsLoaded
+	
+	sessionsByDay = map[string][]Session{}
+	sessionsLoaded = true
+	
+	defer func() {
+		sessionsByDay = originalSessionsByDay
+		sessionsLoaded = originalSessionsLoaded
+	}()
+	
+	t.Run("Empty session data", func(t *testing.T) {
+		// Test FindRoomSessions with no data
+		result := FindRoomSessions("Aug.9", "TR211")
+		testutil.AssertEqual(t, 0, len(result), "Should return empty slice for no data")
+		
+		// Test GetCurrentRoomSession with no data
+		current := GetCurrentRoomSession("TR211", "Aug.9", "10:00")
+		testutil.AssertEqual(t, (*Session)(nil), current, "Should return nil for no data")
+		
+		// Test GetNextRoomSession with no data
+		next := GetNextRoomSession("TR211", "Aug.9", "10:00")
+		testutil.AssertEqual(t, (*Session)(nil), next, "Should return nil for no data")
+	})
+}
+
+func TestRoomScheduleTimeEdgeCases(t *testing.T) {
+	// Test edge cases around session boundaries
+	testSessions := []Session{
+		{
+			Code:  "EDGE-001",
+			Title: "Boundary Test Session",
+			Start: "10:00",
+			End:   "10:30",
+			Room:  "EDGE-ROOM",
+		},
+	}
+	
+	originalSessionsByDay := sessionsByDay
+	originalSessionsLoaded := sessionsLoaded
+	
+	sessionsByDay = map[string][]Session{
+		"EdgeDay": testSessions,
+	}
+	sessionsLoaded = true
+	
+	defer func() {
+		sessionsByDay = originalSessionsByDay
+		sessionsLoaded = originalSessionsLoaded
+	}()
+	
+	tests := []struct {
+		name        string
+		currentTime string
+		testFunc    string
+		expectFound bool
+		description string
+	}{
+		{
+			name:        "Current at exact start",
+			currentTime: "10:00",
+			testFunc:    "current",
+			expectFound: true,
+			description: "Should find session at exact start time",
+		},
+		{
+			name:        "Current at exact end",
+			currentTime: "10:30",
+			testFunc:    "current",
+			expectFound: false,
+			description: "Should not find session at exact end time",
+		},
+		{
+			name:        "Current one minute before end",
+			currentTime: "10:29",
+			testFunc:    "current",
+			expectFound: true,
+			description: "Should find session one minute before end",
+		},
+		{
+			name:        "Next at exact start",
+			currentTime: "10:00",
+			testFunc:    "next",
+			expectFound: false,
+			description: "Should not find next when at start of current",
+		},
+		{
+			name:        "Next one minute before start",
+			currentTime: "09:59",
+			testFunc:    "next",
+			expectFound: true,
+			description: "Should find next session one minute before start",
+		},
+		{
+			name:        "Next at exact end",
+			currentTime: "10:30",
+			testFunc:    "next",
+			expectFound: false,
+			description: "Should not find next session at end of last session",
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var result *Session
+			
+			if tt.testFunc == "current" {
+				result = GetCurrentRoomSession("EDGE-ROOM", "EdgeDay", tt.currentTime)
+			} else {
+				result = GetNextRoomSession("EDGE-ROOM", "EdgeDay", tt.currentTime)
+			}
+			
+			if tt.expectFound {
+				testutil.AssertNotNil(t, result, tt.description)
+				testutil.AssertEqual(t, "EDGE-001", result.Code, "Should find the test session")
+			} else {
+				testutil.AssertEqual(t, (*Session)(nil), result, tt.description)
+			}
+		})
+	}
+}
+
+func TestRoomScheduleMultipleRoomsData(t *testing.T) {
+	// Test that room schedule functions properly filter by room
+	mixedSessions := []Session{
+		{
+			Code:  "TR211-A",
+			Title: "TR211 Session A",
+			Start: "09:00",
+			End:   "09:30",
+			Room:  "TR211",
+		},
+		{
+			Code:  "RB105-A",
+			Title: "RB105 Session A", 
+			Start: "09:15",
+			End:   "09:45",
+			Room:  "RB-105",
+		},
+		{
+			Code:  "TR211-B",
+			Title: "TR211 Session B",
+			Start: "10:00",
+			End:   "10:30",
+			Room:  "TR211",
+		},
+		{
+			Code:  "AU-A",
+			Title: "AU Session A",
+			Start: "09:30",
+			End:   "10:00",
+			Room:  "AU",
+		},
+	}
+	
+	originalSessionsByDay := sessionsByDay
+	originalSessionsLoaded := sessionsLoaded
+	
+	sessionsByDay = map[string][]Session{
+		"MixedDay": mixedSessions,
+	}
+	sessionsLoaded = true
+	
+	defer func() {
+		sessionsByDay = originalSessionsByDay
+		sessionsLoaded = originalSessionsLoaded
+	}()
+	
+	t.Run("Filter TR211 sessions", func(t *testing.T) {
+		result := FindRoomSessions("MixedDay", "TR211")
+		testutil.AssertEqual(t, 2, len(result), "Should find exactly 2 TR211 sessions")
+		
+		// Verify all sessions are TR211
+		for _, session := range result {
+			testutil.AssertEqual(t, "TR211", session.Room, "All sessions should be TR211")
+		}
+		
+		// Verify correct order
+		testutil.AssertEqual(t, "TR211-A", result[0].Code, "First should be TR211-A")
+		testutil.AssertEqual(t, "TR211-B", result[1].Code, "Second should be TR211-B")
+	})
+	
+	t.Run("Filter RB-105 sessions", func(t *testing.T) {
+		result := FindRoomSessions("MixedDay", "RB-105")
+		testutil.AssertEqual(t, 1, len(result), "Should find exactly 1 RB-105 session")
+		testutil.AssertEqual(t, "RB105-A", result[0].Code, "Should be RB105-A")
+	})
+	
+	t.Run("Current session filtering", func(t *testing.T) {
+		// At 09:20, should find different sessions in different rooms
+		tr211Current := GetCurrentRoomSession("TR211", "MixedDay", "09:20")
+		testutil.AssertNotNil(t, tr211Current, "Should find TR211 session at 09:20")
+		testutil.AssertEqual(t, "TR211-A", tr211Current.Code, "Should be TR211-A")
+		
+		rb105Current := GetCurrentRoomSession("RB-105", "MixedDay", "09:20")
+		testutil.AssertNotNil(t, rb105Current, "Should find RB-105 session at 09:20")
+		testutil.AssertEqual(t, "RB105-A", rb105Current.Code, "Should be RB105-A")
+		
+		auCurrent := GetCurrentRoomSession("AU", "MixedDay", "09:20")
+		testutil.AssertEqual(t, (*Session)(nil), auCurrent, "Should not find AU session at 09:20")
+	})
+	
+	t.Run("Next session filtering", func(t *testing.T) {
+		// At 09:20, next sessions should be different for each room
+		tr211Next := GetNextRoomSession("TR211", "MixedDay", "09:20")
+		testutil.AssertNotNil(t, tr211Next, "Should find next TR211 session")
+		testutil.AssertEqual(t, "TR211-B", tr211Next.Code, "Next TR211 should be TR211-B")
+		
+		rb105Next := GetNextRoomSession("RB-105", "MixedDay", "09:20")
+		testutil.AssertEqual(t, (*Session)(nil), rb105Next, "Should not find next RB-105 session")
+		
+		auNext := GetNextRoomSession("AU", "MixedDay", "09:20")
+		testutil.AssertNotNil(t, auNext, "Should find next AU session")
+		testutil.AssertEqual(t, "AU-A", auNext.Code, "Next AU should be AU-A")
+	})
+}

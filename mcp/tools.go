@@ -23,6 +23,8 @@ func CreateMCPTools() map[string]mcp.Tool {
 		"get_next_session":   createGetNextSessionTool(),
 		"get_session_detail": createGetSessionDetailTool(),
 		"finish_planning":    createFinishPlanningTool(),
+		"get_room_schedule":  createGetRoomScheduleTool(),
+		"get_venue_map":      createGetVenueMapTool(),
 		"help":               createHelpTool(),
 	}
 }
@@ -81,7 +83,7 @@ func handleStartPlanning(ctx context.Context, request mcp.CallToolRequest) (*mcp
 func createChooseSessionTool() mcp.Tool {
 	return mcp.NewTool(
 		"choose_session",
-		mcp.WithDescription(sessionIdWarning + "Record user's selected session to their schedule. Use this tool when user explicitly indicates they want to select a certain session. The tool will: 1. Add session to user's schedule 2. Update user's interest profile 3. Automatically recommend next timeslot session options. IMPORTANT: After receiving response, you MUST display ALL available options returned in next_options array. For each session, show the tags field first for categorization, then basic info, create a brief 1-2 sentence summary of the abstract, and include the official COSCUP URL. Group sessions by their tags and present in a clear, organized format in the user's preferred language."),
+		mcp.WithDescription(sessionIdWarning + "Record user's selected session to their schedule. Use this tool when user explicitly indicates they want to select a certain session. The tool will: 1. Add session to user's schedule 2. Update user's interest profile 3. Automatically recommend next timeslot session options. IMPORTANT: After receiving response, you MUST display ALL available options returned in next_options array. For TECHNICAL sessions (AI, programming, systems, security, databases, web development, etc.), show FULL DETAILS including: tags field first for categorization, complete session info (title, speakers, time, room, track), brief 1-2 sentence abstract summary, and official COSCUP URL. For SOCIAL/EVENT sessions (networking, community activities, lunch breaks, etc.) and LONG sessions (over 1 hour duration like hackathons), place them in a separate 'Other Sessions' block at the end with BRIEF info only: session code, title, and room. Group technical sessions by their tags and present in a clear, organized format in the user's preferred language."),
 		mcp.WithString("sessionId", 
 			mcp.Description("User's session ID"),
 		),
@@ -130,7 +132,7 @@ func handleChooseSession(ctx context.Context, request mcp.CallToolRequest) (*mcp
 			nextMessage = "No more sessions available to choose from at this time."
 		}
 	} else {
-		nextMessage = fmt.Sprintf("Selection recorded! Found %d available sessions from different rooms. CRITICAL: You MUST display ALL %d sessions below. For each session, show: 1) Tags (from the tags field) to categorize 2) Basic info (title, speakers, time, room, track) 3) The official COSCUP URL. Note: Abstract field is empty to reduce response size - use get_session_detail tool if user needs complete session information including abstract. Group sessions by their tags and organize them clearly in the user's preferred language.", len(recommendations), len(recommendations))
+		nextMessage = fmt.Sprintf("Selection recorded! Found %d available sessions from different rooms. CRITICAL: You MUST display ALL %d sessions below. For TECHNICAL sessions (AI, programming, systems, security, databases, web development, etc.), show FULL DETAILS: 1) Tags field first for categorization 2) Complete session info (title, speakers, time, room, track) 3) Brief 1-2 sentence abstract summary 4) Official COSCUP URL. For SOCIAL/EVENT sessions (networking, community activities, lunch breaks, etc.) and LONG sessions (over 1 hour duration like hackathons), place in a separate 'Other Sessions' block at the end with BRIEF info only: session code, title, and room. Group technical sessions by their tags and organize them clearly in the user's preferred language.", len(recommendations), len(recommendations))
 	}
 
 	data := map[string]any{
@@ -148,7 +150,7 @@ func handleChooseSession(ctx context.Context, request mcp.CallToolRequest) (*mcp
 func createGetOptionsTool() mcp.Tool {
 	return mcp.NewTool(
 		"get_options",
-		mcp.WithDescription(sessionIdWarning + "Get user's current available session options. Use this tool when you need to recommend next timeslot sessions for the user. The tool will base recommendations on: - User's last selected session end time - Interest profile (learned from previous selections). IMPORTANT: This tool returns ALL available sessions from different rooms. You MUST display every single option returned. For each session, show the tags field first for categorization, then basic info, create a brief 1-2 sentence summary of the abstract, and include the official COSCUP URL. Group sessions by their tags and present in a clear, organized format in the user's preferred language."),
+		mcp.WithDescription(sessionIdWarning + "Get user's current available session options. Use this tool when you need to recommend next timeslot sessions for the user. The tool will base recommendations on: - User's last selected session end time - Interest profile (learned from previous selections). IMPORTANT: This tool returns ALL available sessions from different rooms. You MUST display every single option returned. For TECHNICAL sessions (AI, programming, systems, security, databases, web development, etc.), show FULL DETAILS including: tags field first for categorization, complete session info (title, speakers, time, room, track), brief 1-2 sentence abstract summary, and official COSCUP URL. For SOCIAL/EVENT sessions (networking, community activities, lunch breaks, etc.) and LONG sessions (over 1 hour duration like hackathons), place them in a separate 'Other Sessions' block at the end with BRIEF info only: session code, title, and room. Group technical sessions by their tags and present in a clear, organized format in the user's preferred language."),
 		mcp.WithString("sessionId", 
 			mcp.Description("User's session ID"),
 		),
@@ -180,7 +182,7 @@ func handleGetOptions(ctx context.Context, request mcp.CallToolRequest) (*mcp.Ca
 	if len(recommendations) == 0 {
 		message = "No sessions currently available to choose from. May have completed today's planning or no more suitable timeslots available."
 	} else {
-		message = fmt.Sprintf("Found %d available sessions from different rooms. CRITICAL: You MUST display ALL %d sessions below. For each session, show: 1) Tags (from the tags field) to categorize 2) Basic info (title, speakers, time, room, track) 3) The official COSCUP URL. Note: Abstract field is empty to reduce response size - use get_session_detail tool if user needs complete session information including abstract. Group sessions by their tags, consider user's interests (%v) when organizing them, and present in their preferred language.", len(recommendations), len(recommendations), state.Profile)
+		message = fmt.Sprintf("Found %d available sessions from different rooms. CRITICAL: You MUST display ALL %d sessions below. For TECHNICAL sessions (AI, programming, systems, security, databases, web development, etc.), show FULL DETAILS: 1) Tags field first for categorization 2) Complete session info (title, speakers, time, room, track) 3) Brief 1-2 sentence abstract summary 4) Official COSCUP URL. For SOCIAL/EVENT sessions (networking, community activities, lunch breaks, etc.) and LONG sessions (over 1 hour duration like hackathons), place in a separate 'Other Sessions' block at the end with BRIEF info only: session code, title, and room. Group technical sessions by their tags, consider user's interests (%v), and present in their preferred language.", len(recommendations), len(recommendations), state.Profile)
 	}
 
 	data := map[string]any{
@@ -213,17 +215,17 @@ func createGetScheduleTool() mcp.Tool {
 func createGetNextSessionTool() mcp.Tool {
 	return mcp.NewTool(
 		"get_next_session",
-		mcp.WithDescription(sessionIdWarning + `獲取用戶下一個排定的議程資訊和移動建議。當用戶問：
-- "what's next" / "下一場議程" / "我該去哪"  
-- "接下來要去哪裡" / "下個session在哪"
+		mcp.WithDescription(sessionIdWarning + `Get user's next scheduled session information with navigation advice. Use when user asks:
+- "what's next" / "where should I go" / "next session"
+- "what time is my next talk" / "where do I need to be"
 
-工具會自動判斷當前狀態：
-- 🎯 議程進行中：顯示剩餘時間，預告下一場
-- ⏰ 空檔時間：提供移動建議和時間安排  
-- ✅ 剛結束：立即提供下一場地點和最佳路線
+The tool automatically analyzes current status:
+- 🎯 Ongoing session: Shows remaining time, previews next session
+- ⏰ Break time: Provides movement suggestions and time planning
+- ✅ Just ended: Immediate next venue location and optimal route
 
-回應時要像貼心助手，主動提供移動時間、路線指引和時間規劃建議。
-如果用戶還沒規劃行程，請引導使用 start_planning 開始規劃。`),
+Respond like a helpful assistant, proactively providing travel time, route guidance, and schedule planning advice.
+If user hasn't planned their schedule yet, guide them to use start_planning to begin.`),
 		mcp.WithString("sessionId", 
 			mcp.Description("User's session ID"),
 		),
@@ -237,7 +239,7 @@ func createGetNextSessionTool() mcp.Tool {
 func createGetSessionDetailTool() mcp.Tool {
 	return mcp.NewTool(
 		"get_session_detail",
-		mcp.WithDescription("獲取特定議程的完整詳細資訊，包含完整摘要內容。當你需要瞭解某個議程的詳細描述、難度、語言等完整資訊時使用此工具。這是取得議程 abstract 等完整欄位的唯一方式。"),
+		mcp.WithDescription("Get complete detailed information for a specific session, including full abstract content. Use this tool when you need detailed session description, difficulty level, language, and other complete information. This is the only way to access session abstract and other complete fields."),
 		mcp.WithString("sessionCode", 
 			mcp.Description("The session code to get details for"),
 		),
@@ -261,7 +263,41 @@ func createFinishPlanningTool() mcp.Tool {
 	)
 }
 
-// 8. Help Tool - using new API  
+// 8. Get Room Schedule Tool - using new API
+func createGetRoomScheduleTool() mcp.Tool {
+	return mcp.NewTool(
+		"get_room_schedule",
+		mcp.WithDescription("Query session schedule for a specific room. Supports three modes: 1) Complete daily schedule (default), 2) Current session only (current_only=true), 3) Next session only (next_only=true). Use when user asks about specific room schedules like 'TR211 下一場是什麼', 'RB-105 現在在講什麼', or 'AU 今天有哪些議程'."),
+		mcp.WithString("room", 
+			mcp.Description("Room code (e.g., TR211, RB-105, AU)"),
+		),
+		mcp.WithString("day", 
+			mcp.Description("Day to query ('Aug9' or 'Aug10'). Optional - defaults to current COSCUP day"),
+		),
+		mcp.WithString("next_only", 
+			mcp.Description("Set to 'true' to return only the next upcoming session"),
+		),
+		mcp.WithString("current_only", 
+			mcp.Description("Set to 'true' to return only the currently running session"),
+		),
+		mcp.WithString("callReason", 
+			mcp.Description("Explain why you need room schedule information"),
+		),
+	)
+}
+
+// 9. Get Venue Map Tool - using new API
+func createGetVenueMapTool() mcp.Tool {
+	return mcp.NewTool(
+		"get_venue_map",
+		mcp.WithDescription("Get venue map and navigation information. Use this tool when user asks about directions, venue locations, how to get around campus, or needs visual map guidance. Returns official COSCUP venue map URL with building layouts and navigation details."),
+		mcp.WithString("callReason", 
+			mcp.Description("Explain why you need venue map information, e.g., user asks for directions"),
+		),
+	)
+}
+
+// 10. Help Tool - using new API  
 func createHelpTool() mcp.Tool {
 	return mcp.NewTool(
 		"help",
@@ -333,6 +369,44 @@ func handleGetNextSession(ctx context.Context, request mcp.CallToolRequest) (*mc
 	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
 }
 
+func handleGetVenueMap(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	callReason := request.GetString("callReason", "")
+
+	data := map[string]any{
+		"venue_map_url": "https://coscup.org/2025/venue/",
+		"map_features": []string{
+			"Interactive campus map",
+			"Building locations and layouts", 
+			"Room numbers and capacity",
+			"Parking areas and entrances",
+			"Accessible routes and facilities",
+			"Food courts and rest areas",
+		},
+		"buildings": map[string]string{
+			"AU":  "視聽館 (Audio-Visual Hall)",
+			"RB":  "綜合研究大樓 (Research Building)", 
+			"TR":  "研揚大樓 (TR Building)",
+		},
+		"navigation_tips": []string{
+			"Use building codes (AU, RB, TR) to identify locations",
+			"Check room numbers - first digits indicate floor",
+			"Follow directional signs throughout campus",
+			"Ask volunteers wearing COSCUP shirts for assistance",
+		},
+	}
+	
+	message := "Official COSCUP 2025 venue map available at https://coscup.org/2025/venue/ - provides interactive campus layout, building details, and navigation guidance. Show this URL to the user and explain they can view detailed maps, room locations, and accessibility information."
+	
+	response := Response{
+		Success:    true,
+		Data:       data,
+		CallReason: callReason,
+		Message:    message,
+	}
+
+	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
+}
+
 func handleHelp(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	callReason := request.GetString("callReason", "")
 
@@ -355,12 +429,26 @@ func handleHelp(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
    • 獲得即時的移動建議和路線指引
    • 查看剩餘時間和場館移動資訊
 
+🏢 房間議程查詢
+   • 查詢特定房間的議程安排
+   • 了解某房間下一場或當前議程
+   • 查看房間的完整日程時間表
+
+🗺️ 場地地圖和導航
+   • 獲取官方場地地圖連結
+   • 查看建築物位置和設施資訊
+   • 尋找路線和無障礙通道
+
 💡 使用範例：
    "幫我規劃 8/9 的 COSCUP 行程"
    "我想參加 AI 相關的議程"
    "現在下一場在哪裡？"
    "查看我今天的完整行程"
    "這個議程的詳細內容是什麼？"
+   "TR211 下一場是什麼？"
+   "RB-105 現在在講什麼？"
+   "我要怎麼去 RB 大樓？"
+   "場地地圖在哪裡？"
    "我覺得規劃夠了，結束規劃"
 
 ✨ 特色功能：
@@ -381,6 +469,8 @@ func handleHelp(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
 			"get_next_session",
 			"get_session_detail",
 			"finish_planning",
+			"get_room_schedule",
+			"get_venue_map",
 			"help",
 		},
 	}
@@ -465,6 +555,112 @@ func handleFinishPlanning(ctx context.Context, request mcp.CallToolRequest) (*mc
 	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
 }
 
+func handleGetRoomSchedule(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	room, err := request.RequireString("room")
+	if err != nil {
+		return mcp.NewToolResultError("Error: room is required"), nil
+	}
+
+	// Use provided day or default to current COSCUP day
+	day := request.GetString("day", "")
+	if day == "" {
+		timeProvider := &RealTimeProvider{}
+		day = timeProvider.GetCurrentDay()
+	}
+	if !IsValidDay(day) {
+		return mcp.NewToolResultError("Error: day must be 'Aug9' or 'Aug10'"), nil
+	}
+
+	nextOnly := request.GetString("next_only", "") == "true"
+	currentOnly := request.GetString("current_only", "") == "true"
+	callReason := request.GetString("callReason", "")
+
+	// Convert day format
+	internalDay := convertDayFormat(day)
+
+	// Get current time for time-based queries
+	timeProvider := &RealTimeProvider{}
+	currentTime := timeProvider.GetCurrentTime()
+
+	// Get room sessions
+	roomSessions := FindRoomSessions(internalDay, room)
+	if len(roomSessions) == 0 {
+		return mcp.NewToolResultError(fmt.Sprintf("Error: no sessions found for room %s on %s", room, internalDay)), nil
+	}
+
+	var mode string
+	var sessions []Session
+	var currentSession *Session
+	var nextSession *Session
+
+	if nextOnly {
+		mode = "next_only"
+		nextSession = GetNextRoomSession(room, internalDay, currentTime)
+		if nextSession != nil {
+			sessions = []Session{*nextSession}
+		}
+	} else if currentOnly {
+		mode = "current_only"
+		currentSession = GetCurrentRoomSession(room, internalDay, currentTime)
+		if currentSession != nil {
+			sessions = []Session{*currentSession}
+		}
+	} else {
+		mode = "full_schedule"
+		sessions = roomSessions
+		currentSession = GetCurrentRoomSession(room, internalDay, currentTime)
+		nextSession = GetNextRoomSession(room, internalDay, currentTime)
+	}
+
+	data := map[string]any{
+		"room":          room,
+		"day":           internalDay,
+		"current_time":  currentTime,
+		"mode":          mode,
+		"sessions":      removeAbstractFromSessions(sessions),
+		"total_sessions": len(roomSessions),
+	}
+
+	// Add current and next session info when available
+	if currentSession != nil {
+		data["current_session"] = *currentSession
+	}
+	if nextSession != nil {
+		data["next_session"] = *nextSession
+	}
+
+	var message string
+	switch mode {
+	case "next_only":
+		if nextSession != nil {
+			message = fmt.Sprintf("房間 %s 下一場議程：%s-%s 「%s」",
+				room, nextSession.Start, nextSession.End, nextSession.Title)
+		} else {
+			message = fmt.Sprintf("房間 %s 今天沒有更多議程了", room)
+		}
+	case "current_only":
+		if currentSession != nil {
+			message = fmt.Sprintf("房間 %s 現在正在進行：%s-%s 「%s」",
+				room, currentSession.Start, currentSession.End, currentSession.Title)
+		} else {
+			message = fmt.Sprintf("房間 %s 現在沒有議程進行中", room)
+		}
+	default:
+		message = fmt.Sprintf("房間 %s 在 %s 共有 %d 場議程。已按時間順序排列，請以用戶偏好語言呈現完整的房間議程時間表。",
+			room, internalDay, len(roomSessions))
+	}
+
+	// For room schedule, we don't have a specific sessionID, so pass empty string to buildStandardResponse
+	response := Response{
+		Success:    true,
+		Data:       data,
+		CallReason: callReason,
+		Message:    message,
+	}
+
+	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
+}
+
 // GetToolHandlers returns a map of tool names to their handlers using new API
 func GetToolHandlers() map[string]server.ToolHandlerFunc {
 	return map[string]server.ToolHandlerFunc{
@@ -475,6 +671,8 @@ func GetToolHandlers() map[string]server.ToolHandlerFunc {
 		"get_next_session":   handleGetNextSession,
 		"get_session_detail": handleGetSessionDetail,
 		"finish_planning":    handleFinishPlanning,
+		"get_room_schedule":  handleGetRoomSchedule,
+		"get_venue_map":      handleGetVenueMap,
 		"help":               handleHelp,
 	}
 }

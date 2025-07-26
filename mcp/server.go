@@ -46,7 +46,7 @@ func (s *COSCUPServer) Start() error {
 	go s.startCleanupRoutine()
 
 	log.Println("COSCUP MCP Server is ready!")
-	log.Println("Available tools: start_planning, choose_session, get_options, get_schedule, get_next_session, get_session_detail, finish_planning, help")
+	log.Println("Available tools: start_planning, choose_session, get_options, get_schedule, get_next_session, get_session_detail, finish_planning, get_room_schedule, get_venue_map, help")
 
 	// Start serving (this will block)
 	return server.ServeStdio(s.mcpServer)
@@ -100,6 +100,8 @@ func (s *COSCUPServer) GetStats() map[string]any {
 			"get_next_session",
 			"get_session_detail",
 			"finish_planning",
+			"get_room_schedule",
+			"get_venue_map",
 			"help",
 		},
 	}

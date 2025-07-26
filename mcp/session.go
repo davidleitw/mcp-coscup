@@ -37,7 +37,7 @@ func buildStandardResponse(sessionID string, data map[string]any, message string
 		data = make(map[string]any)
 	}
 	data["sessionId"] = sessionID
-	
+
 	return Response{
 		Success:    true,
 		Data:       data,
@@ -81,11 +81,11 @@ func GenerateSecureSessionID(day string) string {
 		// Fallback to timestamp-based ID if crypto/rand fails
 		return fmt.Sprintf("user_%s_%d_fallback", day, time.Now().UnixNano())
 	}
-	
+
 	// Create a unique ID with timestamp and random component
 	timestamp := time.Now().Unix()
 	randomHex := hex.EncodeToString(randomBytes)
-	
+
 	return fmt.Sprintf("user_%s_%d_%s", day, timestamp, randomHex)
 }
 
@@ -94,23 +94,23 @@ func GenerateSessionIDWithCollisionCheck(day string) string {
 	maxAttempts := 10
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		sessionID := GenerateSecureSessionID(day)
-		
+
 		// Check if this ID already exists in the appropriate shard
 		shardIndex := getShardIndex(sessionID)
 		shard := sessionShards[shardIndex]
-		
+
 		shard.mu.RLock()
 		_, exists := shard.sessions[sessionID]
 		shard.mu.RUnlock()
-		
+
 		if !exists {
 			return sessionID
 		}
-		
+
 		// If collision occurs, wait a tiny bit and try again
 		time.Sleep(1 * time.Millisecond)
 	}
-	
+
 	// Ultimate fallback - use nano timestamp
 	return fmt.Sprintf("user_%s_%d_ultimate", day, time.Now().UnixNano())
 }
@@ -119,7 +119,7 @@ func GenerateSessionIDWithCollisionCheck(day string) string {
 func CreateUserState(sessionID, day string) *UserState {
 	shardIndex := getShardIndex(sessionID)
 	shard := sessionShards[shardIndex]
-	
+
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 
@@ -129,13 +129,13 @@ func CreateUserState(sessionID, day string) *UserState {
 		Schedule:     make([]Session, 0),
 		LastEndTime:  "08:00", // start from early morning
 		Profile:      make([]string, 0),
-		IsCompleted:  false,   // planning not finished yet
+		IsCompleted:  false, // planning not finished yet
 		CreatedAt:    time.Now(),
 		LastActivity: time.Now(),
 	}
 
 	shard.sessions[sessionID] = state
-	log.Printf("🆕 [%s] Created new user session for day %s (Shard: %d)", 
+	log.Printf("🆕 [%s] Created new user session for day %s (Shard: %d)",
 		sessionID, day, shardIndex)
 	return state
 }
@@ -144,7 +144,7 @@ func CreateUserState(sessionID, day string) *UserState {
 func GetUserState(sessionID string) *UserState {
 	shardIndex := getShardIndex(sessionID)
 	shard := sessionShards[shardIndex]
-	
+
 	shard.mu.RLock()
 	defer shard.mu.RUnlock()
 
@@ -162,7 +162,7 @@ func GetUserState(sessionID string) *UserState {
 func UpdateUserState(sessionID string, updater func(*UserState)) error {
 	shardIndex := getShardIndex(sessionID)
 	shard := sessionShards[shardIndex]
-	
+
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 
@@ -195,8 +195,8 @@ func AddSessionToSchedule(sessionID, sessionCode string) error {
 
 		// Update profile based on the selected track
 		addToProfile(state, session.Track)
-		
-		log.Printf("[%s] Session added successfully. Schedule size: %d, End time: %s", 
+
+		log.Printf("[%s] Session added successfully. Schedule size: %d, End time: %s",
 			sessionID, len(state.Schedule), session.End)
 	})
 }
@@ -215,7 +215,7 @@ func addToProfile(state *UserState, track string) {
 func FinishPlanning(sessionID string) error {
 	return UpdateUserState(sessionID, func(state *UserState) {
 		state.IsCompleted = true
-		log.Printf("[%s] User manually finished planning with %d sessions", 
+		log.Printf("[%s] User manually finished planning with %d sessions",
 			sessionID, len(state.Schedule))
 	})
 }
@@ -239,11 +239,11 @@ func FindNextAvailableInEachRoom(day, afterTime string, userSchedule []Session) 
 
 	// Find next available session in each room
 	for _, sessions := range roomSessions {
-		
+
 		// Sort sessions in this room by start time
 		roomSessionsSorted := make([]Session, len(sessions))
 		copy(roomSessionsSorted, sessions)
-		
+
 		// Simple bubble sort by start time
 		for i := 0; i < len(roomSessionsSorted); i++ {
 			for j := i + 1; j < len(roomSessionsSorted); j++ {
@@ -256,7 +256,7 @@ func FindNextAvailableInEachRoom(day, afterTime string, userSchedule []Session) 
 		// Find the first available session in this room
 		for _, session := range roomSessionsSorted {
 			startMinutes := timeToMinutes(session.Start)
-			
+
 			// Must start after afterTime
 			if startMinutes >= afterMinutes {
 				// Check if it conflicts with user schedule
@@ -268,7 +268,7 @@ func FindNextAvailableInEachRoom(day, afterTime string, userSchedule []Session) 
 			}
 		}
 	}
-	
+
 	return nextSessions
 }
 
@@ -288,7 +288,7 @@ func hasTimeConflict(start1, end1, start2, end2 string) bool {
 	end1Min := timeToMinutes(end1)
 	start2Min := timeToMinutes(start2)
 	end2Min := timeToMinutes(end2)
-	
+
 	// Two time periods overlap if:
 	// session1 start < session2 end && session1 end > session2 start
 	return start1Min < end2Min && end1Min > start2Min
@@ -303,35 +303,34 @@ func GetRecommendations(sessionID string, limit int) ([]Session, error) {
 
 	// Use new room-based logic to find next available sessions
 	nextSessions := FindNextAvailableInEachRoom(state.Day, state.LastEndTime, state.Schedule)
-	
+
 	// Return all room sessions (no artificial limit)
 	// Let LLM handle the sorting and presentation based on user preferences
 	return nextSessions, nil
 }
 
-
 // CleanupOldSessions removes sessions older than 24 hours (parallel cleanup)
 func CleanupOldSessions() {
 	cutoff := time.Now().Add(-24 * time.Hour)
 	totalCleaned := 0
-	
+
 	// Clean each shard in parallel
 	var wg sync.WaitGroup
 	cleanedCounts := make([]int, NumShards)
-	
+
 	for i := 0; i < NumShards; i++ {
 		wg.Add(1)
 		go func(shardIndex int) {
 			defer wg.Done()
-			
+
 			shard := sessionShards[shardIndex]
 			shard.mu.Lock()
 			defer shard.mu.Unlock()
-			
+
 			cleaned := 0
 			for sessionID, state := range shard.sessions {
 				if state.LastActivity.Before(cutoff) {
-					log.Printf("[%s] Cleaning up expired session (inactive since %v)", 
+					log.Printf("[%s] Cleaning up expired session (inactive since %v)",
 						sessionID, state.LastActivity.Format("2006-01-02 15:04:05"))
 					delete(shard.sessions, sessionID)
 					cleaned++
@@ -340,14 +339,14 @@ func CleanupOldSessions() {
 			cleanedCounts[shardIndex] = cleaned
 		}(i)
 	}
-	
+
 	wg.Wait()
-	
+
 	// Sum up cleaned sessions
 	for _, count := range cleanedCounts {
 		totalCleaned += count
 	}
-	
+
 	if totalCleaned > 0 {
 		activeCount := 0
 		for i := 0; i < NumShards; i++ {
@@ -364,13 +363,13 @@ func CleanupOldSessions() {
 func GetSessionStats() map[string]any {
 	totalSessions := 0
 	shardStats := make([]int, NumShards)
-	
+
 	for i := 0; i < NumShards; i++ {
 		shard := sessionShards[i]
 		shard.mu.RLock()
 		count := len(shard.sessions)
 		shard.mu.RUnlock()
-		
+
 		shardStats[i] = count
 		totalSessions += count
 	}
@@ -392,14 +391,14 @@ func IsScheduleComplete(sessionID string) bool {
 
 	// Check if there are still available sessions to choose from
 	nextSessions := FindNextAvailableInEachRoom(state.Day, state.LastEndTime, state.Schedule)
-	
+
 	// Schedule is complete only if:
 	// 1. No more available sessions, OR
 	// 2. Last end time is after 17:00 (5 PM) AND user has selected at least 3 sessions
 	lastEndMinutes := timeToMinutes(state.LastEndTime)
 	hasLateEndTime := lastEndMinutes >= 17*60 // 17:00 = 17*60 minutes
 	hasEnoughSessions := len(state.Schedule) >= 3
-	
+
 	return len(nextSessions) == 0 || (hasLateEndTime && hasEnoughSessions)
 }
 
@@ -412,7 +411,7 @@ func generateTimelineView(state *UserState) string {
 	// Sort schedule by start time
 	sortedSchedule := make([]Session, len(state.Schedule))
 	copy(sortedSchedule, state.Schedule)
-	
+
 	// Simple bubble sort by start time
 	for i := 0; i < len(sortedSchedule); i++ {
 		for j := i + 1; j < len(sortedSchedule); j++ {
@@ -423,50 +422,50 @@ func generateTimelineView(state *UserState) string {
 	}
 
 	timeline := fmt.Sprintf("您的 %s 議程安排\n\n", state.Day)
-	
+
 	for i, session := range sortedSchedule {
 		// Add time gap if needed
 		if i > 0 {
 			prevEndTime := sortedSchedule[i-1].End
 			currentStartTime := session.Start
-			
+
 			prevEndMin := timeToMinutes(prevEndTime)
 			currentStartMin := timeToMinutes(currentStartTime)
-			
+
 			if currentStartMin > prevEndMin {
 				gapMinutes := currentStartMin - prevEndMin
 				timeline += fmt.Sprintf("⏰ %s-%s | 🆓 空檔時間 (%d分鐘)\n\n",
 					prevEndTime, currentStartTime, gapMinutes)
 			}
 		}
-		
+
 		// Format session info
 		tags := ""
 		if len(session.Tags) > 0 {
 			tags = session.Tags[0] // Use first tag as primary
 		}
-		
+
 		timeline += fmt.Sprintf("%s-%s | %s\n   %s %s\n   %s | %s | %s %s\n\n",
 			session.Start, session.End, session.Room,
 			tags, session.Title,
 			formatSpeakers(session.Speakers), session.Track,
 			session.Language, session.Difficulty)
 	}
-	
+
 	// Add statistics
 	totalSessions := len(sortedSchedule)
 	if totalSessions > 0 {
 		firstStart := sortedSchedule[0].Start
 		lastEnd := sortedSchedule[totalSessions-1].End
-		
+
 		startMin := timeToMinutes(firstStart)
 		endMin := timeToMinutes(lastEnd)
 		totalHours := (endMin - startMin) / 60
-		
+
 		timeline += fmt.Sprintf("統計：共選擇 %d 個 session，總時間跨度 %d 小時",
 			totalSessions, totalHours)
 	}
-	
+
 	return timeline
 }
 
@@ -528,7 +527,7 @@ func GetNextSessionWithTime(sessionID string, timeProvider TimeProvider) (map[st
 		if state.IsCompleted {
 			return buildCompleteResponse(currentStatus), nil
 		}
-		
+
 		// Before returning complete status, check if there are still sessions available to choose
 		// Only do this check if COSCUP data is properly loaded (not in test environment)
 		if sessionsLoaded {
@@ -536,8 +535,8 @@ func GetNextSessionWithTime(sessionID string, timeProvider TimeProvider) (map[st
 			if len(nextSessions) > 0 {
 				// There are still sessions available, suggest continuing planning
 				return map[string]any{
-					"status":  "planning_available",
-					"message": fmt.Sprintf("您目前已安排 %d 個議程，結束時間是 %s。系統發現還有 %d 個時段可以選擇更多議程。\n\n**重要提示給 LLM：請主動詢問用戶：**\n1. 是否滿意目前的規劃想要結束？請使用 finish_planning 工具\n2. 還是想要查看更多議程選項？請使用 get_options 工具\n\n請根據用戶回應採取相應行動，主動引導用戶做出選擇，不要讓用戶自己決定使用哪個工具。", len(state.Schedule), state.LastEndTime, len(nextSessions)),
+					"status":             "planning_available",
+					"message":            fmt.Sprintf("您目前已安排 %d 個議程，結束時間是 %s。系統發現還有 %d 個時段可以選擇更多議程。\n\n**重要提示給 LLM：請主動詢問用戶：**\n1. 是否滿意目前的規劃想要結束？請使用 finish_planning 工具\n2. 還是想要查看更多議程選項？請使用 get_options 工具\n\n請根據用戶回應採取相應行動，主動引導用戶做出選擇，不要讓用戶自己決定使用哪個工具。", len(state.Schedule), state.LastEndTime, len(nextSessions)),
 					"available_sessions": len(nextSessions),
 				}, nil
 			}
@@ -551,25 +550,23 @@ func GetNextSessionWithTime(sessionID string, timeProvider TimeProvider) (map[st
 	}
 }
 
-// TimeProvider interface for time dependency injection
+// TimeProvider interface for time dependency injection (used in tests)
 type TimeProvider interface {
 	GetCurrentTime() string
+	GetCurrentDay() string
 }
 
-// RealTimeProvider implements TimeProvider using system time
+// RealTimeProvider implements TimeProvider - for demo/testing returns fixed COSCUP time
 type RealTimeProvider struct{}
 
 func (r *RealTimeProvider) GetCurrentTime() string {
-	taiwanLocation, _ := time.LoadLocation("Asia/Taipei")
-	now := time.Now().In(taiwanLocation)
-	return now.Format("15:04")
+	// For demo/testing, always return 8/9 10:23
+	return "10:23"
 }
 
-// getCurrentTaiwanTime returns current time in Taiwan (UTC+8) as "HH:MM"
-// Deprecated: Use TimeProvider interface instead
-func getCurrentTaiwanTime() string {
-	provider := &RealTimeProvider{}
-	return provider.GetCurrentTime()
+func (r *RealTimeProvider) GetCurrentDay() string {
+	// For demo/testing, always return Aug9
+	return "Aug9"
 }
 
 // SessionStatus represents current session status
@@ -584,22 +581,22 @@ type SessionStatus struct {
 
 // RouteInfo represents route between venues
 type RouteInfo struct {
-	FromRoom      string
-	ToRoom        string
-	WalkingTime   int    // minutes
-	RouteDesc     string
-	EnoughTime    bool
+	FromRoom    string
+	ToRoom      string
+	WalkingTime int // minutes
+	RouteDesc   string
+	EnoughTime  bool
 }
 
 // analyzeCurrentStatus analyzes user's current status
 func analyzeCurrentStatus(state *UserState, currentTime string) *SessionStatus {
 	currentMinutes := timeToMinutes(currentTime)
-	
+
 	// Sort schedule by start time
 	sortedSchedule := make([]Session, len(state.Schedule))
 	copy(sortedSchedule, state.Schedule)
-	
-	for i := 0; i < len(sortedSchedule); i++ {
+
+	for i := range sortedSchedule {
 		for j := i + 1; j < len(sortedSchedule); j++ {
 			if timeToMinutes(sortedSchedule[i].Start) > timeToMinutes(sortedSchedule[j].Start) {
 				sortedSchedule[i], sortedSchedule[j] = sortedSchedule[j], sortedSchedule[i]
@@ -609,18 +606,18 @@ func analyzeCurrentStatus(state *UserState, currentTime string) *SessionStatus {
 
 	// Find current and next sessions
 	var currentSession, nextSession *Session
-	
+
 	for i, session := range sortedSchedule {
 		startMin := timeToMinutes(session.Start)
 		endMin := timeToMinutes(session.End)
-		
+
 		// Check if currently in this session
 		if currentMinutes >= startMin && currentMinutes < endMin {
 			currentSession = &session
 			if i+1 < len(sortedSchedule) {
 				nextSession = &sortedSchedule[i+1]
 			}
-			
+
 			return &SessionStatus{
 				Status:           "ongoing",
 				CurrentSession:   currentSession,
@@ -629,17 +626,17 @@ func analyzeCurrentStatus(state *UserState, currentTime string) *SessionStatus {
 				Route:            calculateRoute(currentSession, nextSession),
 			}
 		}
-		
+
 		// Check if this is the next session
 		if currentMinutes < startMin {
 			nextSession = &session
-			
+
 			// Find if there was a previous session that just ended
 			var prevSession *Session
 			if i > 0 {
 				prevSession = &sortedSchedule[i-1]
 				prevEndMin := timeToMinutes(prevSession.End)
-				
+
 				// If just ended (within 10 minutes)
 				if currentMinutes-prevEndMin <= 10 && currentMinutes >= prevEndMin {
 					return &SessionStatus{
@@ -650,7 +647,7 @@ func analyzeCurrentStatus(state *UserState, currentTime string) *SessionStatus {
 					}
 				}
 			}
-			
+
 			// In break time
 			return &SessionStatus{
 				Status:       "break",
@@ -660,7 +657,7 @@ func analyzeCurrentStatus(state *UserState, currentTime string) *SessionStatus {
 			}
 		}
 	}
-	
+
 	// All sessions in user's personal schedule are completed
 	return &SessionStatus{
 		Status: "schedule_complete",
@@ -672,13 +669,13 @@ func calculateRoute(fromSession, toSession *Session) *RouteInfo {
 	if toSession == nil {
 		return nil
 	}
-	
+
 	var fromRoom string
 	if fromSession != nil {
 		fromRoom = fromSession.Room
 	}
 	toRoom := toSession.Room
-	
+
 	// If same room or no previous room
 	if fromRoom == "" || fromRoom == toRoom {
 		return &RouteInfo{
@@ -689,11 +686,11 @@ func calculateRoute(fromSession, toSession *Session) *RouteInfo {
 			EnoughTime:  true,
 		}
 	}
-	
+
 	// Calculate walking time between different venues
 	walkingTime := calculateWalkingTime(fromRoom, toRoom)
 	routeDesc := generateRouteDescription(fromRoom, toRoom)
-	
+
 	return &RouteInfo{
 		FromRoom:    fromRoom,
 		ToRoom:      toRoom,
@@ -721,20 +718,20 @@ func getBuildingFromRoom(room string) string {
 func calculateWalkingTime(fromRoom, toRoom string) int {
 	fromBuilding := getBuildingFromRoom(fromRoom)
 	toBuilding := getBuildingFromRoom(toRoom)
-	
+
 	// Walking times between buildings (minutes)
 	walkingTimes := map[string]map[string]int{
 		"AU": {"AU": 1, "RB": 2, "TR": 4},
 		"RB": {"AU": 2, "RB": 1, "TR": 3},
 		"TR": {"AU": 4, "RB": 3, "TR": 2}, // Between different floors in TR
 	}
-	
+
 	if times, exists := walkingTimes[fromBuilding]; exists {
 		if time, exists := times[toBuilding]; exists {
 			return time
 		}
 	}
-	
+
 	return 5 // Default safe estimate
 }
 
@@ -745,13 +742,13 @@ func generateRouteDescription(fromRoom, toRoom string) string {
 		"RB": "綜合研究大樓",
 		"TR": "研揚大樓",
 	}
-	
+
 	fromBuilding := getBuildingFromRoom(fromRoom)
 	toBuilding := getBuildingFromRoom(toRoom)
-	
+
 	fromName, fromExists := buildingNames[fromBuilding]
 	toName, toExists := buildingNames[toBuilding]
-	
+
 	// Handle unknown buildings
 	if !fromExists {
 		fromName = "Unknown"
@@ -759,11 +756,11 @@ func generateRouteDescription(fromRoom, toRoom string) string {
 	if !toExists {
 		toName = "Unknown"
 	}
-	
+
 	if fromBuilding == toBuilding && fromExists {
 		return fmt.Sprintf("在 %s 內移動：%s → %s", fromName, fromRoom, toRoom)
 	}
-	
+
 	return fmt.Sprintf("%s %s → %s %s", fromName, fromRoom, toName, toRoom)
 }
 
@@ -774,12 +771,12 @@ func buildOngoingResponse(status *SessionStatus) map[string]any {
 		"current_session":   status.CurrentSession,
 		"remaining_minutes": status.RemainingMinutes,
 	}
-	
+
 	var message string
 	if status.NextSession != nil {
 		data["next_session"] = status.NextSession
 		data["route"] = status.Route
-		
+
 		message = fmt.Sprintf("🎯 您目前正在 %s 參加「%s」，還有 %d 分鐘結束。\n\n下一場：%s-%s 在 %s\n「%s」\n\n",
 			status.CurrentSession.Room,
 			status.CurrentSession.Title,
@@ -788,7 +785,7 @@ func buildOngoingResponse(status *SessionStatus) map[string]any {
 			status.NextSession.End,
 			status.NextSession.Room,
 			status.NextSession.Title)
-		
+
 		if status.Route != nil && status.Route.WalkingTime > 0 {
 			message += fmt.Sprintf("🚶 移動路線：%s（約 %d 分鐘）",
 				status.Route.RouteDesc,
@@ -800,7 +797,7 @@ func buildOngoingResponse(status *SessionStatus) map[string]any {
 			status.CurrentSession.Title,
 			status.RemainingMinutes)
 	}
-	
+
 	data["message"] = message
 	return data
 }
@@ -812,14 +809,14 @@ func buildBreakResponse(status *SessionStatus) map[string]any {
 		"break_minutes": status.BreakMinutes,
 		"route":         status.Route,
 	}
-	
+
 	message := fmt.Sprintf("⏰ 您目前有 %d 分鐘空檔時間。\n\n下一場：%s-%s 在 %s\n「%s」\n\n",
 		status.BreakMinutes,
 		status.NextSession.Start,
 		status.NextSession.End,
 		status.NextSession.Room,
 		status.NextSession.Title)
-	
+
 	if status.Route != nil && status.Route.WalkingTime > 0 {
 		timeBuffer := status.BreakMinutes - status.Route.WalkingTime
 		if timeBuffer > 5 {
@@ -839,7 +836,7 @@ func buildBreakResponse(status *SessionStatus) map[string]any {
 	} else {
 		message += "📍 下一場議程在相同地點，您可以繼續留在原地。"
 	}
-	
+
 	data["message"] = message
 	return data
 }
@@ -851,14 +848,14 @@ func buildJustEndedResponse(status *SessionStatus) map[string]any {
 		"break_minutes": status.BreakMinutes,
 		"route":         status.Route,
 	}
-	
+
 	message := fmt.Sprintf("✅ 議程剛結束！距離下一場還有 %d 分鐘。\n\n下一場：%s-%s 在 %s\n「%s」\n\n",
 		status.BreakMinutes,
 		status.NextSession.Start,
 		status.NextSession.End,
 		status.NextSession.Room,
 		status.NextSession.Title)
-	
+
 	if status.Route != nil && status.Route.WalkingTime > 0 {
 		timeBuffer := status.BreakMinutes - status.Route.WalkingTime
 		if timeBuffer > 5 {
@@ -873,7 +870,7 @@ func buildJustEndedResponse(status *SessionStatus) map[string]any {
 	} else {
 		message += "📍 下一場議程在相同地點，您可以留在原地等待。"
 	}
-	
+
 	data["message"] = message
 	return data
 }
@@ -891,11 +888,73 @@ func removeAbstractFromSessions(sessions []Session) []Session {
 	if len(sessions) == 0 {
 		return sessions
 	}
-	
+
 	result := make([]Session, len(sessions))
 	for i, session := range sessions {
 		result[i] = session
 		result[i].Abstract = "" // Clear abstract to reduce response size
 	}
 	return result
+}
+
+// FindRoomSessions returns all sessions for a specific room on a given day
+func FindRoomSessions(day, room string) []Session {
+	if !sessionsLoaded {
+		if err := LoadCOSCUPData(); err != nil {
+			return nil
+		}
+	}
+
+	var roomSessions []Session
+	for _, session := range sessionsByDay[day] {
+		if session.Room == room {
+			roomSessions = append(roomSessions, session)
+		}
+	}
+
+	// Sort by start time
+	for i := 0; i < len(roomSessions); i++ {
+		for j := i + 1; j < len(roomSessions); j++ {
+			if timeToMinutes(roomSessions[i].Start) > timeToMinutes(roomSessions[j].Start) {
+				roomSessions[i], roomSessions[j] = roomSessions[j], roomSessions[i]
+			}
+		}
+	}
+
+	return roomSessions
+}
+
+// GetCurrentRoomSession returns the session currently running in a room
+func GetCurrentRoomSession(room, day, currentTime string) *Session {
+	roomSessions := FindRoomSessions(day, room)
+	currentMinutes := timeToMinutes(currentTime)
+
+	for _, session := range roomSessions {
+		startMin := timeToMinutes(session.Start)
+		endMin := timeToMinutes(session.End)
+
+		// Check if current time is within session period
+		if currentMinutes >= startMin && currentMinutes < endMin {
+			return &session
+		}
+	}
+
+	return nil
+}
+
+// GetNextRoomSession returns the next session in a room after the current time
+func GetNextRoomSession(room, day, currentTime string) *Session {
+	roomSessions := FindRoomSessions(day, room)
+	currentMinutes := timeToMinutes(currentTime)
+
+	for _, session := range roomSessions {
+		startMin := timeToMinutes(session.Start)
+
+		// Find first session that starts after current time
+		if startMin > currentMinutes {
+			return &session
+		}
+	}
+
+	return nil
 }
