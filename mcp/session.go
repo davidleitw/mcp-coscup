@@ -1,7 +1,11 @@
 package mcp
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"hash/fnv"
+	"log"
 	"sync"
 	"time"
 )
@@ -25,16 +29,82 @@ type Response struct {
 	Message    string `json:"message"`
 }
 
-// Global in-memory storage with thread safety
-var (
-	userStates = make(map[string]*UserState)
-	stateMutex = sync.RWMutex{}
-)
+// Simple sharded storage with 16 shards for better concurrency
+const NumShards = 16
+
+type SessionShard struct {
+	mu       sync.RWMutex
+	sessions map[string]*UserState
+}
+
+// Global sharded storage
+var sessionShards [NumShards]*SessionShard
+
+func init() {
+	// Initialize all shards
+	for i := 0; i < NumShards; i++ {
+		sessionShards[i] = &SessionShard{
+			sessions: make(map[string]*UserState),
+		}
+	}
+}
+
+// getShardIndex returns which shard a sessionID should go to
+func getShardIndex(sessionID string) int {
+	hash := fnv.New32a()
+	hash.Write([]byte(sessionID))
+	return int(hash.Sum32() % NumShards)
+}
+
+// GenerateSecureSessionID creates a cryptographically secure session ID
+func GenerateSecureSessionID(day string) string {
+	// Generate 8 random bytes
+	randomBytes := make([]byte, 8)
+	if _, err := rand.Read(randomBytes); err != nil {
+		// Fallback to timestamp-based ID if crypto/rand fails
+		return fmt.Sprintf("user_%s_%d_fallback", day, time.Now().UnixNano())
+	}
+	
+	// Create a unique ID with timestamp and random component
+	timestamp := time.Now().Unix()
+	randomHex := hex.EncodeToString(randomBytes)
+	
+	return fmt.Sprintf("user_%s_%d_%s", day, timestamp, randomHex)
+}
+
+// GenerateSessionIDWithCollisionCheck generates a session ID and ensures it's unique
+func GenerateSessionIDWithCollisionCheck(day string) string {
+	maxAttempts := 10
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		sessionID := GenerateSecureSessionID(day)
+		
+		// Check if this ID already exists in the appropriate shard
+		shardIndex := getShardIndex(sessionID)
+		shard := sessionShards[shardIndex]
+		
+		shard.mu.RLock()
+		_, exists := shard.sessions[sessionID]
+		shard.mu.RUnlock()
+		
+		if !exists {
+			return sessionID
+		}
+		
+		// If collision occurs, wait a tiny bit and try again
+		time.Sleep(1 * time.Millisecond)
+	}
+	
+	// Ultimate fallback - use nano timestamp
+	return fmt.Sprintf("user_%s_%d_ultimate", day, time.Now().UnixNano())
+}
 
 // CreateUserState creates a new user planning session
 func CreateUserState(sessionID, day string) *UserState {
-	stateMutex.Lock()
-	defer stateMutex.Unlock()
+	shardIndex := getShardIndex(sessionID)
+	shard := sessionShards[shardIndex]
+	
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
 
 	state := &UserState{
 		SessionID:    sessionID,
@@ -46,29 +116,39 @@ func CreateUserState(sessionID, day string) *UserState {
 		LastActivity: time.Now(),
 	}
 
-	userStates[sessionID] = state
+	shard.sessions[sessionID] = state
+	log.Printf("🆕 [%s] Created new user session for day %s (Shard: %d)", 
+		sessionID, day, shardIndex)
 	return state
 }
 
 // GetUserState retrieves user state by session ID
 func GetUserState(sessionID string) *UserState {
-	stateMutex.RLock()
-	defer stateMutex.RUnlock()
+	shardIndex := getShardIndex(sessionID)
+	shard := sessionShards[shardIndex]
+	
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
 
-	if state, exists := userStates[sessionID]; exists {
+	if state, exists := shard.sessions[sessionID]; exists {
 		// Update last activity
 		state.LastActivity = time.Now()
+		log.Printf("🔍 [%s] Session accessed, last activity updated", sessionID)
 		return state
 	}
+	log.Printf("❌ [%s] Session not found", sessionID)
 	return nil
 }
 
 // UpdateUserState updates the user state
 func UpdateUserState(sessionID string, updater func(*UserState)) error {
-	stateMutex.Lock()
-	defer stateMutex.Unlock()
+	shardIndex := getShardIndex(sessionID)
+	shard := sessionShards[shardIndex]
+	
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
 
-	state, exists := userStates[sessionID]
+	state, exists := shard.sessions[sessionID]
 	if !exists {
 		return fmt.Errorf("session %s not found", sessionID)
 	}
@@ -82,8 +162,11 @@ func UpdateUserState(sessionID string, updater func(*UserState)) error {
 func AddSessionToSchedule(sessionID, sessionCode string) error {
 	session := FindSessionByCode(sessionCode)
 	if session == nil {
+		log.Printf("❌ [%s] Failed to add session %s - session not found", sessionID, sessionCode)
 		return fmt.Errorf("session %s not found", sessionCode)
 	}
+
+	log.Printf("➕ [%s] Adding session %s (%s) to schedule", sessionID, sessionCode, session.Title)
 
 	return UpdateUserState(sessionID, func(state *UserState) {
 		// Add to schedule
@@ -94,6 +177,9 @@ func AddSessionToSchedule(sessionID, sessionCode string) error {
 
 		// Update profile based on the selected track
 		addToProfile(state, session.Track)
+		
+		log.Printf("✅ [%s] Session added successfully. Schedule size: %d, End time: %s", 
+			sessionID, len(state.Schedule), session.End)
 	})
 }
 
@@ -196,57 +282,76 @@ func GetRecommendations(sessionID string, limit int) ([]Session, error) {
 	return nextSessions, nil
 }
 
-// ScoredSession represents a session with recommendation score
-type ScoredSession struct {
-	Session Session
-	Score   float64
-}
 
-// calculateScore calculates recommendation score for a session
-func calculateScore(session Session, profile []string) float64 {
-	score := 1.0 // base score
-
-	// Boost score if track matches user profile
-	for _, track := range profile {
-		if session.Track == track {
-			score += 2.0
-			break
-		}
-	}
-
-	// Boost for Chinese language (assuming most users prefer Chinese)
-	if session.Language == "漢語" {
-		score += 0.5
-	}
-
-	// Small boost for beginner/intermediate level
-	if session.Difficulty == "入門" || session.Difficulty == "中階" {
-		score += 0.3
-	}
-
-	return score
-}
-
-// CleanupOldSessions removes sessions older than 24 hours
+// CleanupOldSessions removes sessions older than 24 hours (parallel cleanup)
 func CleanupOldSessions() {
-	stateMutex.Lock()
-	defer stateMutex.Unlock()
-
 	cutoff := time.Now().Add(-24 * time.Hour)
-	for sessionID, state := range userStates {
-		if state.LastActivity.Before(cutoff) {
-			delete(userStates, sessionID)
+	totalCleaned := 0
+	
+	// Clean each shard in parallel
+	var wg sync.WaitGroup
+	cleanedCounts := make([]int, NumShards)
+	
+	for i := 0; i < NumShards; i++ {
+		wg.Add(1)
+		go func(shardIndex int) {
+			defer wg.Done()
+			
+			shard := sessionShards[shardIndex]
+			shard.mu.Lock()
+			defer shard.mu.Unlock()
+			
+			cleaned := 0
+			for sessionID, state := range shard.sessions {
+				if state.LastActivity.Before(cutoff) {
+					log.Printf("🗑️  [%s] Cleaning up expired session (inactive since %v)", 
+						sessionID, state.LastActivity.Format("2006-01-02 15:04:05"))
+					delete(shard.sessions, sessionID)
+					cleaned++
+				}
+			}
+			cleanedCounts[shardIndex] = cleaned
+		}(i)
+	}
+	
+	wg.Wait()
+	
+	// Sum up cleaned sessions
+	for _, count := range cleanedCounts {
+		totalCleaned += count
+	}
+	
+	if totalCleaned > 0 {
+		activeCount := 0
+		for i := 0; i < NumShards; i++ {
+			shard := sessionShards[i]
+			shard.mu.RLock()
+			activeCount += len(shard.sessions)
+			shard.mu.RUnlock()
 		}
+		log.Printf("🧹 Cleaned up %d expired sessions, %d sessions remain active", totalCleaned, activeCount)
 	}
 }
 
 // GetSessionStats returns basic statistics about active sessions
 func GetSessionStats() map[string]any {
-	stateMutex.RLock()
-	defer stateMutex.RUnlock()
+	totalSessions := 0
+	shardStats := make([]int, NumShards)
+	
+	for i := 0; i < NumShards; i++ {
+		shard := sessionShards[i]
+		shard.mu.RLock()
+		count := len(shard.sessions)
+		shard.mu.RUnlock()
+		
+		shardStats[i] = count
+		totalSessions += count
+	}
 
 	return map[string]any{
-		"active_sessions": len(userStates),
+		"active_sessions": totalSessions,
+		"shard_stats":     shardStats,
+		"num_shards":      NumShards,
 		"timestamp":       time.Now().Format(time.RFC3339),
 	}
 }
