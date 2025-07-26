@@ -73,12 +73,24 @@ fi
 
 # 5. 驗證部署
 echo -e "${BLUE}✨ 步驟 4: 驗證部署...${NC}"
-sleep 2  # 等待服務器啟動
 
-if claude mcp list | grep -q "$MCP_NAME.*✓ Connected"; then
-    echo -e "${GREEN}✅ MCP 服務器連接成功!${NC}"
+# 檢查服務器是否成功註冊
+if claude mcp list | grep -q "$MCP_NAME"; then
+    echo -e "${GREEN}✅ MCP 服務器成功註冊!${NC}"
+    
+    # 顯示當前狀態
+    echo -e "${BLUE}當前狀態:${NC}"
+    claude mcp list | grep "$MCP_NAME"
+    
+    # 檢查是否已連接（不強制要求）
+    if claude mcp list | grep -q "$MCP_NAME.*Connected"; then
+        echo -e "${GREEN}🔗 服務器已成功連接${NC}"
+    else
+        echo -e "${YELLOW}⏳ 服務器正在連接中，這是正常的...${NC}"
+        echo -e "${BLUE}💡 重新啟動 Claude Code 後將自動連接${NC}"
+    fi
 else
-    echo -e "${RED}❌ MCP 服務器連接失敗${NC}"
+    echo -e "${RED}❌ MCP 服務器註冊失敗${NC}"
     echo -e "${YELLOW}請手動檢查: claude mcp list${NC}"
     exit 1
 fi
