@@ -265,7 +265,7 @@ func createFinishPlanningTool() mcp.Tool {
 func createHelpTool() mcp.Tool {
 	return mcp.NewTool(
 		"help",
-		mcp.WithDescription("Get comprehensive help about COSCUP Arranger features and how to use them. Use this tool when you need to understand available functionality or when user asks for help (e.g., 'coscup help me', 'what can you do', 'help', etc.). Provides user-friendly explanation of all available features."),
+		mcp.WithDescription("Get user-friendly help about COSCUP planning operations and usage examples. Use this tool when user asks for help, wants to know what they can do, or needs usage guidance. Provides practical examples and operation categories rather than technical tool lists."),
 		mcp.WithString("callReason", 
 			mcp.Description("Explain why you are calling this tool and what help the user needs"),
 		),
@@ -336,52 +336,40 @@ func handleGetNextSession(ctx context.Context, request mcp.CallToolRequest) (*mc
 func handleHelp(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	callReason := request.GetString("callReason", "")
 
-	helpContent := `COSCUP 議程規劃助手功能說明
+	helpContent := `🎯 COSCUP 議程規劃助手使用指南
 
-開始規劃 (start_planning)
-   - 選擇要規劃的日期（8/9 或 8/10）
-   - 系統會推薦當天最早的議程選項
-   - 用法：告訴我你想規劃哪一天的議程
+我可以幫您安排 COSCUP 2025 的議程，支援以下操作：
 
-選擇議程 (choose_session)  
-   - 從推薦清單中選擇感興趣的 session
-   - 系統會自動更新你的興趣偏好並推薦下一時段
-   - 用法：選擇你想參加的 session 代碼
+📅 規劃議程
+   • 告訴我您想規劃哪一天（8/9 或 8/10）
+   • 從推薦清單中選擇感興趣的議程
+   • 系統會自動避免時間衝突並推薦下一時段
 
-查看選項 (get_options)
-   - 取得下一時段的可選 session
-   - 基於你的興趣偏好進行智慧推薦
-   - 用法：詢問下一個時段有什麼可以選擇
+🗓️ 管理行程  
+   • 查看完整的議程時間軸安排
+   • 獲取特定議程的詳細資訊和摘要
+   • 隨時結束規劃並確定最終行程
 
-查看議程 (get_schedule)
-   - 檢視完整的規劃時間軸
-   - 按時間順序顯示所有已選擇的 session
-   - 用法：查看我的完整議程安排
+🧭 當天導航
+   • 詢問 "what's next" 或 "下一場議程"
+   • 獲得即時的移動建議和路線指引
+   • 查看剩餘時間和場館移動資訊
 
-查詢下一場議程 (get_next_session)
-   - 智慧判斷當前狀態，提供移動建議和路線指引
-   - 顯示剩餘時間、下一場地點、移動時間
-   - 用法：詢問 "what's next" 或 "下一場議程"
+💡 使用範例：
+   "幫我規劃 8/9 的 COSCUP 行程"
+   "我想參加 AI 相關的議程"
+   "現在下一場在哪裡？"
+   "查看我今天的完整行程"
+   "這個議程的詳細內容是什麼？"
+   "我覺得規劃夠了，結束規劃"
 
-取得議程詳情 (get_session_detail)
-   - 獲取特定議程的完整詳細資訊，包含完整摘要內容
-   - 提供難度等級、授課語言等所有詳細欄位
-   - 用法：當需要了解議程完整描述時使用
+✨ 特色功能：
+   • 智慧推薦：根據您的興趣自動推薦相關議程
+   • 路線規劃：計算場館間移動時間和最佳路線
+   • 即時狀態：知道現在該做什麼、去哪裡
+   • 中英文支援：可以用中文或英文與我互動
 
-完成規劃 (finish_planning)
-   - 主動結束當天的議程規劃
-   - 標記規劃狀態為已完成，避免系統持續推薦新議程
-   - 用法：當用戶滿意當前安排並想結束規劃時使用
-
-取得幫助 (help)
-   - 隨時輸入 "coscup help me" 獲得完整功能說明
-   - 或直接說 "help" 也可以觸發此功能
-
-使用提示：
-   - 一次只能規劃一天的議程
-   - 系統會自動避免時間衝突
-   - 可隨時查看目前的規劃進度
-   - 所有操作都支援中英文互動`
+隨時說 "help" 或 "幫助" 都可以再次查看此說明！`
 
 	data := map[string]any{
 		"help_content": helpContent,
@@ -397,7 +385,7 @@ func handleHelp(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
 		},
 	}
 	
-	message := "COSCUP 議程規劃助手功能說明已提供。請以用戶偏好語言呈現完整的功能介紹和使用指南。"
+	message := "COSCUP 議程規劃助手使用指南已提供。請以用戶偏好語言友善地介紹如何使用這個規劃助手，重點說明可以進行的操作和實用範例。"
 	
 	// For help, we don't need a specific sessionID
 	response := Response{
