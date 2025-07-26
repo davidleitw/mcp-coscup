@@ -8,28 +8,28 @@ import re
 
 # Tag mapping based on track and content
 TAG_MAPPING = {
-    "AI": "🧠 AI",
-    "Languages": "🗣️ Languages", 
-    "Web3": "⛓️ Web3",
-    "Database": "🗃️ Database",
-    "Security": "🔒 Security",
-    "Hardware": "🛠️ Hardware",
-    "Vehicle": "🚗 Vehicle",
-    "Network": "🌐 Network",
-    "DevOps": "🚀️ DevOps",
-    "System": "💻 System",
-    "Enterprise": "🏢 Enterprise",
-    "Data": "📊 Data",
-    "Gaming": "🎮 Gaming",
-    "Agriculture": "🌾 Agriculture",
-    "Healthcare": "⚕️ Healthcare",
-    "Keynote": "🔑 Keynote",
-    "Policy": "📜️ Policy",
-    "Global": "🌍 Global",
-    "OpenData": "👐️ OpenData",
-    "Education": "🎓 Education",
-    "Social": "🍻 Social",
-    "SideProject": "💡 SideProject"
+    "AI": "AI",
+    "Languages": "Languages", 
+    "Web3": "Web3",
+    "Database": "Database",
+    "Security": "Security",
+    "Hardware": "Hardware",
+    "Vehicle": "Vehicle",
+    "Network": "Network",
+    "DevOps": "DevOps",
+    "System": "System",
+    "Enterprise": "Enterprise",
+    "Data": "Data",
+    "Gaming": "Gaming",
+    "Agriculture": "Agriculture",
+    "Healthcare": "Healthcare",
+    "Keynote": "Keynote",
+    "Policy": "Policy",
+    "Global": "Global",
+    "OpenData": "OpenData",
+    "Education": "Education",
+    "Social": "Social",
+    "SideProject": "SideProject"
 }
 
 def generate_tags(session):
@@ -164,28 +164,28 @@ def generate_go_file():
 
 // Universal session tags with emojis
 const (
-	TagAI          = "🧠 AI"
-	TagLanguages   = "🗣️ Languages"
-	TagWeb3        = "⛓️ Web3"
-	TagDatabase    = "🗃️ Database"
-	TagSecurity    = "🔒 Security"
-	TagHardware    = "🛠️ Hardware"
-	TagVehicle     = "🚗 Vehicle"
-	TagNetwork     = "🌐 Network"
-	TagDevOps      = "🚀️ DevOps"
-	TagSystem      = "💻 System"
-	TagEnterprise  = "🏢 Enterprise"
-	TagData        = "📊 Data"
-	TagGaming      = "🎮 Gaming"
-	TagAgriculture = "🌾 Agriculture"
-	TagHealthcare  = "⚕️ Healthcare"
-	TagKeynote     = "🔑 Keynote"
-	TagPolicy      = "📜️ Policy"
-	TagGlobal      = "🌍 Global"
-	TagOpenData    = "👐️ OpenData"
-	TagEducation   = "🎓 Education"
-	TagSocial      = "🍻 Social"
-	TagSideProject = "💡 SideProject"
+	TagAI          = "AI"
+	TagLanguages   = "Languages"
+	TagWeb3        = "Web3"
+	TagDatabase    = "Database"
+	TagSecurity    = "Security"
+	TagHardware    = "Hardware"
+	TagVehicle     = "Vehicle"
+	TagNetwork     = "Network"
+	TagDevOps      = "DevOps"
+	TagSystem      = "System"
+	TagEnterprise  = "Enterprise"
+	TagData        = "Data"
+	TagGaming      = "Gaming"
+	TagAgriculture = "Agriculture"
+	TagHealthcare  = "Healthcare"
+	TagKeynote     = "Keynote"
+	TagPolicy      = "Policy"
+	TagGlobal      = "Global"
+	TagOpenData    = "OpenData"
+	TagEducation   = "Education"
+	TagSocial      = "Social"
+	TagSideProject = "SideProject"
 )
 
 // EmbeddedCOSCUPData contains hardcoded COSCUP 2025 session data
@@ -240,7 +240,7 @@ if __name__ == '__main__':
     with open('mcp/embedded_data.go', 'w', encoding='utf-8') as f:
         f.write(go_code)
     
-    print("✅ embedded_data.go generated successfully!")
+    print("embedded_data.go generated successfully!")
     
     # Count sessions for verification
     with open('data/coscup_2025_by_day_room.json', 'r', encoding='utf-8') as f:
@@ -251,4 +251,4 @@ if __name__ == '__main__':
         for room, sessions in rooms.items():
             total_sessions += len(sessions)
             
-    print(f"📊 Total sessions processed: {total_sessions}")
+    print(f"Total sessions processed: {total_sessions}")
