@@ -112,8 +112,14 @@ func timeToMinutes(timeStr string) int {
 		return 0
 	}
 
-	hours, _ := strconv.Atoi(parts[0])
-	minutes, _ := strconv.Atoi(parts[1])
+	hours, err1 := strconv.Atoi(parts[0])
+	minutes, err2 := strconv.Atoi(parts[1])
+	
+	// Validate input range
+	if err1 != nil || err2 != nil || hours < 0 || hours > 23 || minutes < 0 || minutes > 59 {
+		return 0
+	}
+	
 	return hours*60 + minutes
 }
 

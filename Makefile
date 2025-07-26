@@ -43,13 +43,36 @@ build-all: build build-windows build-mac build-mac-arm
 # 測試本地版本
 .PHONY: test
 test:
+	go test ./mcp
+
+# 詳細測試輸出
+.PHONY: test-verbose
+test-verbose:
+	go test ./mcp -v
+
+# 測試覆蓋率
+.PHONY: test-coverage
+test-coverage:
+	go test ./mcp -cover -coverprofile=coverage.out
+	go tool cover -func=coverage.out
+
+# 生成 HTML 覆蓋率報告
+.PHONY: test-coverage-html
+test-coverage-html:
+	go test ./mcp -cover -coverprofile=coverage.out
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+
+# 運行所有測試 (包括原有的所有包)
+.PHONY: test-all
+test-all:
 	go test ./...
 
 # 運行資料測試
 .PHONY: test-data
 test-data:
 	@echo "Testing data loading..."
-	@timeout 3s ./$(BUILD_DIR)/$(BINARY_NAME) 2>&1 | head -10 || echo "✅ Server started successfully"
+	@timeout 3s ./$(BUILD_DIR)/$(BINARY_NAME) 2>&1 | head -10 || echo "Server started successfully"
 
 # 測試 Windows 版本 (需要 Wine 或在 Windows 環境)
 .PHONY: test-windows
@@ -65,7 +88,7 @@ docker-build:
 .PHONY: docker-run
 docker-run:
 	@echo "Running Docker container (will timeout after 5 seconds)..."
-	@timeout 5s docker run --rm $(DOCKER_TAG) || echo "✅ Docker container started successfully"
+	@timeout 5s docker run --rm $(DOCKER_TAG) || echo "Docker container started successfully"
 
 .PHONY: docker-test
 docker-test: docker-build docker-run
@@ -74,6 +97,7 @@ docker-test: docker-build docker-run
 .PHONY: clean
 clean:
 	rm -rf $(BUILD_DIR)
+	rm -f coverage.out coverage.html
 	docker rmi $(DOCKER_TAG) 2>/dev/null || true
 
 # 開發相關
@@ -93,12 +117,12 @@ vet:
 # 完整的開發流程
 .PHONY: dev
 dev: fmt vet deps test build
-	@echo "✅ Development build completed!"
+	@echo "Development build completed!"
 
 # 發佈流程
 .PHONY: release
 release: clean fmt vet test build-all docker-build
-	@echo "🚀 Release build completed!"
+	@echo "Release build completed!"
 	@echo "Binaries created:"
 	@ls -la $(BUILD_DIR)/
 

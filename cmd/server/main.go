@@ -8,14 +8,14 @@ import (
 )
 
 func main() {
-	log.Println("🎯 Initializing COSCUP MCP Server...")
+	log.Println("Initializing COSCUP MCP Server...")
 
 	// Create new COSCUP server instance
 	server := mcp.NewCOSCUPServer()
 
 	// Start the server (this will block)
 	if err := server.Start(); err != nil {
-		log.Printf("❌ Server error: %v", err)
+		log.Printf("Server error: %v", err)
 		os.Exit(1)
 	}
 }
