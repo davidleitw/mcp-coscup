@@ -20,14 +20,14 @@ func NewCOSCUPServer() *COSCUPServer {
 
 // Start initializes and starts the MCP server
 func (s *COSCUPServer) Start() error {
-	log.Println("🎉 Starting COSCUP MCP Server...")
+	log.Println("Starting COSCUP MCP Server...")
 
 	// Load COSCUP data first
-	log.Println("📊 Loading COSCUP session data...")
+	log.Println("Loading COSCUP session data...")
 	if err := LoadCOSCUPData(); err != nil {
 		return fmt.Errorf("failed to load COSCUP data: %w", err)
 	}
-	log.Println("✅ COSCUP data loaded successfully")
+	log.Println("COSCUP data loaded successfully")
 
 	// Create MCP server
 	s.mcpServer = server.NewMCPServer(
@@ -45,8 +45,8 @@ func (s *COSCUPServer) Start() error {
 	// Start cleanup routine for old sessions
 	go s.startCleanupRoutine()
 
-	log.Println("🚀 COSCUP MCP Server is ready!")
-	log.Println("💡 Available tools: start_planning, choose_session, get_options, mcp_ask")
+	log.Println("COSCUP MCP Server is ready!")
+	log.Println("Available tools: start_planning, choose_session, get_options, get_schedule, get_next_session, get_session_detail, finish_planning, help")
 
 	// Start serving (this will block)
 	return server.ServeStdio(s.mcpServer)
@@ -64,7 +64,7 @@ func (s *COSCUPServer) registerTools() error {
 		}
 
 		s.mcpServer.AddTool(tool, handler)
-		log.Printf("✅ Registered tool: %s", toolName)
+		log.Printf("Registered tool: %s", toolName)
 	}
 
 	return nil
@@ -76,10 +76,10 @@ func (s *COSCUPServer) startCleanupRoutine() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		log.Println("🧹 Running session cleanup...")
+		log.Println("Running session cleanup...")
 		CleanupOldSessions()
 		stats := GetSessionStats()
-		log.Printf("📊 Active sessions: %v", stats["active_sessions"])
+		log.Printf("Active sessions: %v", stats["active_sessions"])
 	}
 }
 
@@ -96,7 +96,11 @@ func (s *COSCUPServer) GetStats() map[string]any {
 			"start_planning",
 			"choose_session",
 			"get_options",
-			"mcp_ask",
+			"get_schedule",
+			"get_next_session",
+			"get_session_detail",
+			"finish_planning",
+			"help",
 		},
 	}
 }
