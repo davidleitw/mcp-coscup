@@ -107,50 +107,93 @@ func addToProfile(state *UserState, track string) {
 	state.Profile = append(state.Profile, track)
 }
 
-// GetRecommendations returns recommended sessions for the user
+// FindNextAvailableInEachRoom finds next available session in each room after given time
+func FindNextAvailableInEachRoom(day, afterTime string, userSchedule []Session) []Session {
+	if !sessionsLoaded {
+		if err := LoadCOSCUPData(); err != nil {
+			return nil
+		}
+	}
+
+	// Group sessions by room
+	roomSessions := make(map[string][]Session)
+	for _, session := range sessionsByDay[day] {
+		roomSessions[session.Room] = append(roomSessions[session.Room], session)
+	}
+
+	var nextSessions []Session
+	afterMinutes := timeToMinutes(afterTime)
+
+	// Find next available session in each room
+	for _, sessions := range roomSessions {
+		
+		// Sort sessions in this room by start time
+		roomSessionsSorted := make([]Session, len(sessions))
+		copy(roomSessionsSorted, sessions)
+		
+		// Simple bubble sort by start time
+		for i := 0; i < len(roomSessionsSorted); i++ {
+			for j := i + 1; j < len(roomSessionsSorted); j++ {
+				if timeToMinutes(roomSessionsSorted[i].Start) > timeToMinutes(roomSessionsSorted[j].Start) {
+					roomSessionsSorted[i], roomSessionsSorted[j] = roomSessionsSorted[j], roomSessionsSorted[i]
+				}
+			}
+		}
+
+		// Find the first available session in this room
+		for _, session := range roomSessionsSorted {
+			startMinutes := timeToMinutes(session.Start)
+			
+			// Must start after afterTime
+			if startMinutes >= afterMinutes {
+				// Check if it conflicts with user schedule
+				if !hasConflictWithSchedule(session, userSchedule) {
+					nextSessions = append(nextSessions, session)
+					break // Found the next available session for this room
+				}
+				// If it conflicts, continue to check the next session in this room
+			}
+		}
+	}
+	
+	return nextSessions
+}
+
+// hasConflictWithSchedule checks if session conflicts with user's existing schedule
+func hasConflictWithSchedule(session Session, userSchedule []Session) bool {
+	for _, scheduled := range userSchedule {
+		if hasTimeConflict(session.Start, session.End, scheduled.Start, scheduled.End) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasTimeConflict checks if two time periods overlap
+func hasTimeConflict(start1, end1, start2, end2 string) bool {
+	start1Min := timeToMinutes(start1)
+	end1Min := timeToMinutes(end1)
+	start2Min := timeToMinutes(start2)
+	end2Min := timeToMinutes(end2)
+	
+	// Two time periods overlap if:
+	// session1 start < session2 end && session1 end > session2 start
+	return start1Min < end2Min && end1Min > start2Min
+}
+
+// GetRecommendations returns recommended sessions for the user using new room-based logic
 func GetRecommendations(sessionID string, limit int) ([]Session, error) {
 	state := GetUserState(sessionID)
 	if state == nil {
 		return nil, fmt.Errorf("session %s not found", sessionID)
 	}
 
-	// Get available sessions after last end time
-	availableSessions := FindSessionsAfter(state.Day, state.LastEndTime)
-	if len(availableSessions) == 0 {
-		return []Session{}, nil
-	}
-
-	// Score and sort sessions based on user profile
-	scoredSessions := make([]ScoredSession, 0)
-	for _, session := range availableSessions {
-		score := calculateScore(session, state.Profile)
-		scoredSessions = append(scoredSessions, ScoredSession{
-			Session: session,
-			Score:   score,
-		})
-	}
-
-	// Sort by score (descending)
-	for i := 0; i < len(scoredSessions)-1; i++ {
-		for j := i + 1; j < len(scoredSessions); j++ {
-			if scoredSessions[i].Score < scoredSessions[j].Score {
-				scoredSessions[i], scoredSessions[j] = scoredSessions[j], scoredSessions[i]
-			}
-		}
-	}
-
-	// Return top recommendations
-	result := make([]Session, 0)
-	maxCount := limit
-	if len(scoredSessions) < maxCount {
-		maxCount = len(scoredSessions)
-	}
-
-	for i := 0; i < maxCount; i++ {
-		result = append(result, scoredSessions[i].Session)
-	}
-
-	return result, nil
+	// Use new room-based logic to find next available sessions
+	nextSessions := FindNextAvailableInEachRoom(state.Day, state.LastEndTime, state.Schedule)
+	
+	// Return all room sessions (no artificial limit)
+	// Let LLM handle the sorting and presentation based on user preferences
+	return nextSessions, nil
 }
 
 // ScoredSession represents a session with recommendation score

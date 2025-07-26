@@ -1,13 +1,14 @@
 package mcp
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// CreateMCPTools creates and returns all MCP tools
+// CreateMCPTools creates and returns all MCP tools using new helper functions
 func CreateMCPTools() map[string]mcp.Tool {
 	return map[string]mcp.Tool{
 		"start_planning": createStartPlanningTool(),
@@ -17,139 +18,99 @@ func CreateMCPTools() map[string]mcp.Tool {
 	}
 }
 
-// 1. Start Planning Tool
+// 1. Start Planning Tool - using new API
 func createStartPlanningTool() mcp.Tool {
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"day": map[string]any{
-				"type":        "string",
-				"description": "要規劃的日期，必須是 'Aug.9' 或 'Aug.10'",
-				"enum":        []string{"Aug.9", "Aug.10"},
-			},
-			"call_reason": map[string]any{
-				"type":        "string",
-				"description": "說明你為什麼要呼叫這個工具，以及預期得到什麼結果",
-			},
-		},
-		"required": []string{"day", "call_reason"},
-	}
-
 	return mcp.NewTool(
 		"start_planning",
-		"開始規劃 COSCUP 某天的行程。作為 LLM，當用戶說想安排某天行程時，請使用此工具開始規劃流程。使用後你會收到當天最早的議程選項，請向用戶友善地介紹這些選項並徵求意見。",
-		schema,
+		mcp.WithDescription("Start planning COSCUP schedule for a specific day. As an LLM, use this tool when user wants to arrange their daily schedule. After using this tool, you will receive the earliest session options for that day. Please introduce these options to the user in a friendly manner in the user's preferred language and ask for their opinion."),
+		mcp.WithString("day", 
+			mcp.Description("The day to plan schedule for. Must be 'Aug9' or 'Aug10'"),
+			mcp.Enum("Aug9", "Aug10"),
+		),
+		mcp.WithString("callReason", 
+			mcp.Description("Explain why you are calling this tool and what result you expect to get"),
+		),
 	)
 }
 
-func handleStartPlanning(args map[string]any) (*mcp.CallToolResult, error) {
-	day, ok := args["day"].(string)
-	if !ok || !IsValidDay(day) {
-		return &mcp.CallToolResult{
-			Content: []any{
-				mcp.NewTextContent("錯誤：日期必須是 'Aug.9' 或 'Aug.10'"),
-			},
-		}, nil
+func handleStartPlanning(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	day, err := request.RequireString("day")
+	if err != nil || !IsValidDay(day) {
+		return mcp.NewToolResultError("Error: day must be 'Aug9' or 'Aug10'"), nil
 	}
 
-	callReason, _ := args["call_reason"].(string)
+	callReason := request.GetString("callReason", "")
 
 	// Generate a simple session ID
 	sessionID := fmt.Sprintf("user_%s_%d",
-		map[string]string{"Aug.9": "09", "Aug.10": "10"}[day],
+		map[string]string{"Aug9": "09", "Aug10": "10"}[day],
 		len(userStates)+1)
 
-	// Create new user state
-	CreateUserState(sessionID, day)
+	// Convert day format and create new user state
+	internalDay := convertDayFormat(day)
+	CreateUserState(sessionID, internalDay)
 
 	// Get first sessions of the day
-	firstSessions := GetFirstSession(day)
+	firstSessions := GetFirstSession(internalDay)
 	if len(firstSessions) == 0 {
-		return &mcp.CallToolResult{
-			Content: []any{
-				mcp.NewTextContent(fmt.Sprintf("錯誤：找不到 %s 的議程資料", day)),
-			},
-		}, nil
+		return mcp.NewToolResultError(fmt.Sprintf("Error: no session data found for %s", internalDay)), nil
 	}
 
 	response := Response{
 		Success: true,
 		Data: map[string]any{
-			"session_id": sessionID,
-			"day":        day,
+			"sessionId": sessionID,
+			"day":        internalDay,
 			"options":    firstSessions,
 		},
 		CallReason: callReason,
-		Message: fmt.Sprintf("已開始規劃 %s 的行程，session ID: %s。請向用戶介紹這 %d 個早上的議程選項，並請他們選擇感興趣的。",
-			day, sessionID, len(firstSessions)),
+		Message: fmt.Sprintf("Started planning schedule for %s, session ID: %s. Please introduce these %d morning session options to the user in their preferred language and ask them to choose the ones they're interested in.",
+			internalDay, sessionID, len(firstSessions)),
 	}
 
-	return &mcp.CallToolResult{
-		Content: []any{
-			mcp.NewTextContent(fmt.Sprintf("%+v", response)),
-		},
-	}, nil
+	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
 }
 
-// 2. Choose Session Tool
+// 2. Choose Session Tool - using new API
 func createChooseSessionTool() mcp.Tool {
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"session_id": map[string]any{
-				"type":        "string",
-				"description": "用戶的 session ID",
-			},
-			"session_code": map[string]any{
-				"type":        "string",
-				"description": "用戶選擇的議程代碼",
-			},
-			"call_reason": map[string]any{
-				"type":        "string",
-				"description": "說明用戶選擇了什麼，以及你為什麼要記錄這個選擇",
-			},
-		},
-		"required": []string{"session_id", "session_code", "call_reason"},
-	}
-
 	return mcp.NewTool(
 		"choose_session",
-		"記錄用戶選擇的議程到他們的行程中。當用戶明確表示要選擇某個議程時使用此工具。工具會：1. 將議程加入用戶行程 2. 更新用戶興趣 profile 3. 自動推薦下個時段的議程選項。收到回應後，請向用戶確認選擇，並介紹下個時段的推薦選項。",
-		schema,
+		mcp.WithDescription("Record user's selected session to their schedule. Use this tool when user explicitly indicates they want to select a certain session. The tool will: 1. Add session to user's schedule 2. Update user's interest profile 3. Automatically recommend next timeslot session options. IMPORTANT: After receiving response, you MUST display ALL available options returned in next_options array. For each session, show the tags field first for categorization, then basic info, create a brief 1-2 sentence summary of the abstract, and include the official COSCUP URL. Group sessions by their tags and present in a clear, organized format in the user's preferred language."),
+		mcp.WithString("sessionId", 
+			mcp.Description("User's session ID"),
+		),
+		mcp.WithString("sessionCode", 
+			mcp.Description("The session code that user selected"),
+		),
+		mcp.WithString("callReason", 
+			mcp.Description("Explain what the user selected and why you want to record this choice"),
+		),
 	)
 }
 
-func handleChooseSession(args map[string]any) (*mcp.CallToolResult, error) {
-	sessionID, _ := args["session_id"].(string)
-	sessionCode, _ := args["session_code"].(string)
-	callReason, _ := args["call_reason"].(string)
-
-	if sessionID == "" || sessionCode == "" {
-		return &mcp.CallToolResult{
-			Content: []any{
-				mcp.NewTextContent("錯誤：session_id 和 session_code 都是必要參數"),
-			},
-		}, nil
+func handleChooseSession(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	sessionID, err := request.RequireString("sessionId")
+	if err != nil {
+		return mcp.NewToolResultError("Error: sessionId is required"), nil
 	}
 
-	// Add session to user's schedule
-	err := AddSessionToSchedule(sessionID, sessionCode)
+	sessionCode, err := request.RequireString("sessionCode")
 	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []any{
-				mcp.NewTextContent(fmt.Sprintf("錯誤：%s", err.Error())),
-			},
-		}, nil
+		return mcp.NewToolResultError("Error: sessionCode is required"), nil
+	}
+
+	callReason := request.GetString("callReason", "")
+
+	// Add session to user's schedule
+	err = AddSessionToSchedule(sessionID, sessionCode)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Error: %s", err.Error())), nil
 	}
 
 	// Get selected session details
 	selectedSession := FindSessionByCode(sessionCode)
 	if selectedSession == nil {
-		return &mcp.CallToolResult{
-			Content: []any{
-				mcp.NewTextContent("錯誤：找不到所選議程的詳細資訊"),
-			},
-		}, nil
+		return mcp.NewToolResultError("Error: cannot find details of selected session"), nil
 	}
 
 	// Get next recommendations
@@ -158,12 +119,12 @@ func handleChooseSession(args map[string]any) (*mcp.CallToolResult, error) {
 	var nextMessage string
 	if len(recommendations) == 0 {
 		if IsScheduleComplete(sessionID) {
-			nextMessage = "太棒了！您的行程規劃已完成。請使用 mcp_ask 查看完整行程。"
+			nextMessage = "Great! Your schedule planning is complete. Please use mcp_ask to view the full schedule."
 		} else {
-			nextMessage = "目前沒有更多可選的議程了。"
+			nextMessage = "No more sessions available to choose from at this time."
 		}
 	} else {
-		nextMessage = fmt.Sprintf("已記錄選擇！現在請為用戶推薦下個時段的 %d 個議程選項。", len(recommendations))
+		nextMessage = fmt.Sprintf("Selection recorded! Found %d available sessions from different rooms. CRITICAL: You MUST display ALL %d sessions below. For each session, show: 1) Tags (from the tags field) to categorize 2) Basic info (title, speakers, time, room, track) 3) A brief 1-2 sentence summary instead of the full abstract 4) The official COSCUP URL for detailed information. Group sessions by their tags and organize them clearly in the user's preferred language.", len(recommendations), len(recommendations))
 	}
 
 	response := Response{
@@ -177,72 +138,46 @@ func handleChooseSession(args map[string]any) (*mcp.CallToolResult, error) {
 		Message:    nextMessage,
 	}
 
-	return &mcp.CallToolResult{
-		Content: []any{
-			mcp.NewTextContent(fmt.Sprintf("%+v", response)),
-		},
-	}, nil
+	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
 }
 
-// 3. Get Options Tool
+// 3. Get Options Tool - using new API
 func createGetOptionsTool() mcp.Tool {
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"session_id": map[string]any{
-				"type":        "string",
-				"description": "用戶的 session ID",
-			},
-			"call_reason": map[string]any{
-				"type":        "string",
-				"description": "說明你為什麼需要取得選項，例如：需要推薦下個時段的議程",
-			},
-		},
-		"required": []string{"session_id", "call_reason"},
-	}
-
 	return mcp.NewTool(
 		"get_options",
-		"取得用戶當前可選的議程選項。當你需要為用戶推薦下個時段的議程時使用此工具。工具會根據用戶的：- 上次選擇的議程結束時間 - 興趣 profile (從之前的選擇學習)。回傳最多5個推薦的議程。請根據推薦分數排序並友善地介紹給用戶。",
-		schema,
+		mcp.WithDescription("Get user's current available session options. Use this tool when you need to recommend next timeslot sessions for the user. The tool will base recommendations on: - User's last selected session end time - Interest profile (learned from previous selections). IMPORTANT: This tool returns ALL available sessions from different rooms. You MUST display every single option returned. For each session, show the tags field first for categorization, then basic info, create a brief 1-2 sentence summary of the abstract, and include the official COSCUP URL. Group sessions by their tags and present in a clear, organized format in the user's preferred language."),
+		mcp.WithString("sessionId", 
+			mcp.Description("User's session ID"),
+		),
+		mcp.WithString("callReason", 
+			mcp.Description("Explain why you need to get options, e.g., need to recommend next timeslot sessions"),
+		),
 	)
 }
 
-func handleGetOptions(args map[string]any) (*mcp.CallToolResult, error) {
-	sessionID, _ := args["session_id"].(string)
-	callReason, _ := args["call_reason"].(string)
-
-	if sessionID == "" {
-		return &mcp.CallToolResult{
-			Content: []any{
-				mcp.NewTextContent("錯誤：session_id 是必要參數"),
-			},
-		}, nil
+func handleGetOptions(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	sessionID, err := request.RequireString("sessionId")
+	if err != nil {
+		return mcp.NewToolResultError("Error: sessionId is required"), nil
 	}
+
+	callReason := request.GetString("callReason", "")
 
 	state := GetUserState(sessionID)
 	if state == nil {
-		return &mcp.CallToolResult{
-			Content: []any{
-				mcp.NewTextContent("錯誤：找不到指定的 session"),
-			},
-		}, nil
+		return mcp.NewToolResultError("Error: cannot find specified session"), nil
 	}
 
 	recommendations, err := GetRecommendations(sessionID, 5)
 	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []any{
-				mcp.NewTextContent(fmt.Sprintf("錯誤：%s", err.Error())),
-			},
-		}, nil
+		return mcp.NewToolResultError(fmt.Sprintf("Error: %s", err.Error())), nil
 	}
 
 	var message string
 	if len(recommendations) == 0 {
-		message = "當前沒有可選的議程。可能已經完成今日規劃，或沒有更多適合的時段。"
+		message = "No sessions currently available to choose from. May have completed today's planning or no more suitable timeslots available."
 	} else {
-		message = fmt.Sprintf("找到 %d 個推薦議程，已按照用戶興趣排序。請友善地介紹這些選項。", len(recommendations))
+		message = fmt.Sprintf("Found %d available sessions from different rooms. CRITICAL: You MUST display ALL %d sessions below. For each session, show: 1) Tags (from the tags field) to categorize 2) Basic info (title, speakers, time, room, track) 3) A brief 1-2 sentence summary instead of the full abstract 4) The official COSCUP URL for detailed information. Group sessions by their tags, consider user's interests (%v) when organizing them, and present in their preferred language.", len(recommendations), len(recommendations), state.Profile)
 	}
 
 	response := Response{
@@ -257,61 +192,38 @@ func handleGetOptions(args map[string]any) (*mcp.CallToolResult, error) {
 		Message:    message,
 	}
 
-	return &mcp.CallToolResult{
-		Content: []any{
-			mcp.NewTextContent(fmt.Sprintf("%+v", response)),
-		},
-	}, nil
+	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
 }
 
-// 4. MCP Ask Tool
+// 4. MCP Ask Tool - using new API
 func createMCPAskTool() mcp.Tool {
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"session_id": map[string]any{
-				"type":        "string",
-				"description": "用戶的 session ID",
-			},
-			"question": map[string]any{
-				"type":        "string",
-				"description": "你想確認什麼？描述你的困惑或需要驗證的點",
-			},
-			"call_reason": map[string]any{
-				"type":        "string",
-				"description": "簡述為什麼需要確認，例如：用戶想查看完整行程",
-			},
-		},
-		"required": []string{"session_id", "question", "call_reason"},
-	}
-
 	return mcp.NewTool(
 		"mcp_ask",
-		"自我檢查和狀態確認工具。使用時機：- 當你對上一個操作的結果不確定時 - 需要查看用戶完整行程時 - 想確認當前狀態是否正確時 - 用戶詢問他們目前的規劃狀況時。這個工具會回傳完整的用戶狀態，幫助你重新評估並決定下一步行動。",
-		schema,
+		mcp.WithDescription("Self-check and status confirmation tool. Use when: - You're uncertain about the result of the previous operation - Need to view user's complete schedule - Want to confirm if current status is correct - User asks about their current planning status. This tool returns complete user state to help you reassess and decide next actions. Respond to users in their preferred language."),
+		mcp.WithString("sessionId", 
+			mcp.Description("User's session ID"),
+		),
+		mcp.WithString("question", 
+			mcp.Description("What do you want to confirm? Describe your confusion or points that need verification"),
+		),
+		mcp.WithString("callReason", 
+			mcp.Description("Briefly explain why confirmation is needed, e.g., user wants to view complete schedule"),
+		),
 	)
 }
 
-func handleMCPAsk(args map[string]any) (*mcp.CallToolResult, error) {
-	sessionID, _ := args["session_id"].(string)
-	question, _ := args["question"].(string)
-	callReason, _ := args["call_reason"].(string)
-
-	if sessionID == "" {
-		return &mcp.CallToolResult{
-			Content: []any{
-				mcp.NewTextContent("錯誤：session_id 是必要參數"),
-			},
-		}, nil
+func handleMCPAsk(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	sessionID, err := request.RequireString("sessionId")
+	if err != nil {
+		return mcp.NewToolResultError("Error: sessionId is required"), nil
 	}
+
+	question := request.GetString("question", "")
+	callReason := request.GetString("callReason", "")
 
 	state := GetUserState(sessionID)
 	if state == nil {
-		return &mcp.CallToolResult{
-			Content: []any{
-				mcp.NewTextContent("錯誤：找不到指定的 session"),
-			},
-		}, nil
+		return mcp.NewToolResultError("Error: cannot find specified session"), nil
 	}
 
 	// Get available options for context
@@ -321,7 +233,7 @@ func handleMCPAsk(args map[string]any) (*mcp.CallToolResult, error) {
 		Success: true,
 		Data: map[string]any{
 			"current_state": map[string]any{
-				"session_id":     state.SessionID,
+				"sessionId":     state.SessionID,
 				"day":            state.Day,
 				"schedule":       state.Schedule,
 				"schedule_count": len(state.Schedule),
@@ -333,18 +245,14 @@ func handleMCPAsk(args map[string]any) (*mcp.CallToolResult, error) {
 			"question":     question,
 		},
 		CallReason: callReason,
-		Message: fmt.Sprintf("✅ 當前狀態確認完成。用戶已選擇 %d 個議程，最後結束時間 %s。根據這些資訊回答用戶的問題。",
+		Message: fmt.Sprintf("✅ Current status confirmation completed. User has selected %d sessions, last end time %s. Answer user's questions based on this information in their preferred language.",
 			len(state.Schedule), state.LastEndTime),
 	}
 
-	return &mcp.CallToolResult{
-		Content: []any{
-			mcp.NewTextContent(fmt.Sprintf("%+v", response)),
-		},
-	}, nil
+	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
 }
 
-// GetToolHandlers returns a map of tool names to their handlers
+// GetToolHandlers returns a map of tool names to their handlers using new API
 func GetToolHandlers() map[string]server.ToolHandlerFunc {
 	return map[string]server.ToolHandlerFunc{
 		"start_planning": handleStartPlanning,

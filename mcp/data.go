@@ -18,6 +18,8 @@ type Session struct {
 	Difficulty string `json:"difficulty"`
 	Room     string   // derived from JSON structure
 	Day      string   // "Aug.9" or "Aug.10"
+	URL      string   `json:"url"` // Official COSCUP session URL
+	Tags     []string `json:"tags"` // Universal tags for categorization
 }
 
 
@@ -34,10 +36,16 @@ func LoadCOSCUPData() error {
 		return nil
 	}
 
-	// Use embedded data instead of reading from file
+	// Use embedded data from embedded_data.go
 	for day, rooms := range EmbeddedCOSCUPData {
 		for _, sessions := range rooms {
 			for _, session := range sessions {
+				// Add official COSCUP URL
+				session.URL = "https://coscup.org/2025/sessions/" + session.Code
+				
+				// Tags are already defined in embedded_data.go
+				// No need to generate tags - they come from the embedded data
+				
 				allSessions = append(allSessions, session)
 				sessionsByDay[day] = append(sessionsByDay[day], session)
 			}
@@ -131,8 +139,21 @@ func timeToMinutes(timeStr string) int {
 
 // IsValidDay checks if the given day is valid
 func IsValidDay(day string) bool {
-	return day == "Aug.9" || day == "Aug.10"
+	return day == "Aug9" || day == "Aug10"
 }
+
+// convertDayFormat converts user input format to internal format
+func convertDayFormat(userDay string) string {
+	switch userDay {
+	case "Aug9":
+		return "Aug.9"
+	case "Aug10":
+		return "Aug.10"
+	default:
+		return userDay
+	}
+}
+
 
 // GetAllTracks returns all unique tracks
 func GetAllTracks() []string {
