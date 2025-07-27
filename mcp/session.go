@@ -393,7 +393,7 @@ func CleanupOldSessions() {
 
 	if totalCleaned > 0 {
 		activeCount := 0
-		for i := 0; i < NumShards; i++ {
+		for i := range NumShards {
 			shard := sessionShards[i]
 			shard.mu.RLock()
 			activeCount += len(shard.sessions)
