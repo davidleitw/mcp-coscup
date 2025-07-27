@@ -17,15 +17,11 @@
 
 ## 怎麼使用？
 
-現在有兩種使用方式，選擇最適合你的：
+我們提供雲端 MCP 服務，支援多種 Claude 客戶端：
 
-### 🌐 方式一：雲端服務（推薦，免安裝）
+### 💻 Claude Code（命令行工具）
 
-我們已經把服務部署到雲端了！
-
-#### **🚀 一行指令安裝（最簡單）**
-
-如果你已經有 Claude Code，只需要一行指令：
+**🚀 一行指令安裝（最簡單）**
 
 ```bash
 # 安裝遠端 MCP 服務
@@ -35,49 +31,73 @@ claude mcp add --transport http coscup-remote https://mcp-coscup-scnu6evqhq-de.a
 claude mcp remove coscup-remote -s user
 ```
 
-#### **📱 手動設定（如果使用 Claude Desktop）**
+### 📱 Claude Desktop（桌面應用）
 
 #### **Step 1: 下載 Claude Desktop**
 前往 [Claude Desktop](https://claude.ai/download) 下載並安裝
 
 #### **Step 2: 設定 MCP 連接**
 
-1. **開啟 Claude Desktop 設定**
-   - macOS: `Claude Desktop` → `Settings` → `Developer`
-   - Windows: `Settings` → `Developer`
+**🎯 使用 UI 界面設定（推薦）**
 
-2. **編輯 MCP 設定檔**
+1. **開啟設定頁面**
+   - **macOS**: `Claude Desktop` → `Settings` → `Developer`
+   - **Windows**: `File` → `Settings` → `Connectors`
+
+2. **點擊「Add custom connector」**
    
-   找到設定檔位置：
-   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
+   <img src="images/claude_desktop.png" alt="Claude Desktop MCP 設定界面" width="400"/>
 
-3. **加入我們的 MCP 伺服器設定**
-   
-   在設定檔中加入以下內容：
-   ```json
-   {
-     "mcpServers": {
-       "coscup-remote": {
-         "command": "npx",
-         "args": [
-           "@anthropic-ai/mcp-client-http",
-           "https://mcp-coscup-scnu6evqhq-de.a.run.app/mcp"
-         ]
-       }
-     }
-   }
-   ```
+3. **填入連接資訊**
+   - **名稱**: `mcp-coscup`
+   - **URL**: `https://mcp-coscup-scnu6evqhq-de.a.run.app/mcp`
+   - OAuth Client ID 和 Secret 留空即可
 
-4. **重啟 Claude Desktop**
-   
-   關閉並重新開啟 Claude Desktop
+4. **點擊「Add」完成設定**
 
-#### **Step 3: 開始使用**
+<details>
+<summary>📝 手動編輯配置檔（備用方法）</summary>
 
-重啟後，你就可以在 Claude Desktop 中直接使用 COSCUP 相關功能了！
+如果 UI 界面不可用，可以手動編輯配置檔：
 
-**測試是否設定成功：**
+**配置檔位置：**
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
+
+**配置內容：**
+```json
+{
+  "mcpServers": {
+    "coscup-remote": {
+      "command": "npx",
+      "args": [
+        "@anthropic-ai/mcp-client-http",
+        "https://mcp-coscup-scnu6evqhq-de.a.run.app/mcp"
+      ]
+    }
+  }
+}
+```
+
+設定完成後重啟 Claude Desktop。
+
+</details>
+
+### 🔗 其他 MCP 兼容工具
+
+我們的 MCP 服務遵循標準協議，理論上支援所有 MCP 兼容的客戶端。
+
+**服務端點**: `https://mcp-coscup-scnu6evqhq-de.a.run.app/mcp`
+
+如果你在使用其他工具（如自製的 MCP 客戶端、第三方整合工具等），歡迎：
+- 📝 提交 Issue 分享你的使用經驗
+- 🔧 貢獻設定說明到我們的文檔
+- 💡 告訴我們需要什麼額外支援
+
+### ✅ 測試設定
+
+設定完成後，試試這個指令：
+
 ```
 你：幫我安排 Aug.9 COSCUP 的行程
 ```
