@@ -22,20 +22,16 @@ type Session struct {
 	Tags       []string `json:"tags"` // Universal tags for categorization
 }
 
-// Global data storage
+// Global data storage - initialized at package load time
 var (
-	allSessions    []Session
-	sessionsByDay  = make(map[string][]Session)
-	sessionsLoaded = false
+	allSessions   []Session
+	sessionsByDay = make(map[string][]Session)
 )
 
-// LoadCOSCUPData loads embedded COSCUP data
-func LoadCOSCUPData() error {
-	if sessionsLoaded {
-		return nil
-	}
-
-	// Use embedded data from embedded_data.go
+// init initializes COSCUP session data from embedded data
+// This happens automatically when the package is loaded
+func init() {
+	// Process embedded data from embedded_data.go
 	for day, rooms := range COSCUPData {
 		for _, sessions := range rooms {
 			for _, session := range sessions {
@@ -50,19 +46,10 @@ func LoadCOSCUPData() error {
 			}
 		}
 	}
-
-	sessionsLoaded = true
-	return nil
 }
 
 // FindSessionByCode finds a session by its code
 func FindSessionByCode(code string) *Session {
-	if !sessionsLoaded {
-		if err := LoadCOSCUPData(); err != nil {
-			return nil
-		}
-	}
-
 	for _, session := range allSessions {
 		if session.Code == code {
 			return &session
@@ -73,29 +60,23 @@ func FindSessionByCode(code string) *Session {
 
 // GetFirstSession returns the first session of the day (usually Welcome)
 func GetFirstSession(day string) []Session {
-	if !sessionsLoaded {
-		if err := LoadCOSCUPData(); err != nil {
-			return nil
-		}
-	}
-
 	sessions := sessionsByDay[day]
 	if len(sessions) == 0 {
 		return nil
 	}
 
 	// Find the earliest start time
-	earliestTime := "23:59"
+	earliest := "23:59"
 	for _, session := range sessions {
-		if session.Start < earliestTime {
-			earliestTime = session.Start
+		if session.Start < earliest {
+			earliest = session.Start
 		}
 	}
 
 	// Return all sessions that start at the earliest time
 	var result []Session
 	for _, session := range sessions {
-		if session.Start == earliestTime {
+		if session.Start == earliest {
 			result = append(result, session)
 		}
 	}

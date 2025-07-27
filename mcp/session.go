@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"strings"
 	"sync"
 	"time"
 )
@@ -59,7 +60,7 @@ var sessionShards [NumShards]*SessionShard
 
 func init() {
 	// Initialize all shards
-	for i := 0; i < NumShards; i++ {
+	for i := range NumShards {
 		sessionShards[i] = &SessionShard{
 			sessions: make(map[string]*UserState),
 		}
@@ -92,7 +93,7 @@ func GenerateSecureSessionID(day string) string {
 // GenerateSessionIDWithCollisionCheck generates a session ID and ensures it's unique
 func GenerateSessionIDWithCollisionCheck(day string) string {
 	maxAttempts := 10
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for range maxAttempts {
 		sessionID := GenerateSecureSessionID(day)
 
 		// Check if this ID already exists in the appropriate shard
@@ -184,14 +185,40 @@ func AddSessionToSchedule(sessionID, sessionCode string) error {
 		return fmt.Errorf("session %s not found", sessionCode)
 	}
 
+	// Get current user state to check for conflicts
+	state := GetUserState(sessionID)
+	if state == nil {
+		return fmt.Errorf("session %s not found", sessionID)
+	}
+
+	// Check for time conflicts with existing schedule
+	if hasConflictWithSchedule(*session, state.Schedule) {
+		// Find the conflicting session(s)
+		conflictingSessions := findConflictingSessions(*session, state.Schedule)
+		conflictList := ""
+		for i, conflict := range conflictingSessions {
+			if i > 0 {
+				conflictList += ", "
+			}
+			conflictList += fmt.Sprintf("%s-%s %s", conflict.Start, conflict.End, conflict.Title)
+		}
+		
+		log.Printf("[%s] Time conflict detected for session %s (%s-%s)", 
+			sessionID, sessionCode, session.Start, session.End)
+		return fmt.Errorf("時間衝突：您選擇的議程 %s-%s「%s」與已安排的議程重疊：%s。請選擇其他時段的議程", 
+			session.Start, session.End, session.Title, conflictList)
+	}
+
 	log.Printf("[%s] Adding session %s (%s) to schedule", sessionID, sessionCode, session.Title)
 
 	return UpdateUserState(sessionID, func(state *UserState) {
 		// Add to schedule
 		state.Schedule = append(state.Schedule, *session)
 
-		// Update last end time
-		state.LastEndTime = session.End
+		// Update last end time (only if this session ends later)
+		if timeToMinutes(session.End) > timeToMinutes(state.LastEndTime) {
+			state.LastEndTime = session.End
+		}
 
 		// Update profile based on the selected track
 		addToProfile(state, session.Track)
@@ -222,11 +249,6 @@ func FinishPlanning(sessionID string) error {
 
 // FindNextAvailableInEachRoom finds next available session in each room after given time
 func FindNextAvailableInEachRoom(day, afterTime string, userSchedule []Session) []Session {
-	if !sessionsLoaded {
-		if err := LoadCOSCUPData(); err != nil {
-			return nil
-		}
-	}
 
 	// Group sessions by room
 	roomSessions := make(map[string][]Session)
@@ -282,6 +304,17 @@ func hasConflictWithSchedule(session Session, userSchedule []Session) bool {
 	return false
 }
 
+// findConflictingSessions returns all sessions that conflict with the given session
+func findConflictingSessions(session Session, userSchedule []Session) []Session {
+	var conflicts []Session
+	for _, scheduled := range userSchedule {
+		if hasTimeConflict(session.Start, session.End, scheduled.Start, scheduled.End) {
+			conflicts = append(conflicts, scheduled)
+		}
+	}
+	return conflicts
+}
+
 // hasTimeConflict checks if two time periods overlap
 func hasTimeConflict(start1, end1, start2, end2 string) bool {
 	start1Min := timeToMinutes(start1)
@@ -295,7 +328,7 @@ func hasTimeConflict(start1, end1, start2, end2 string) bool {
 }
 
 // GetRecommendations returns recommended sessions for the user using new room-based logic
-func GetRecommendations(sessionID string, limit int) ([]Session, error) {
+func GetRecommendations(sessionID string) ([]Session, error) {
 	state := GetUserState(sessionID)
 	if state == nil {
 		return nil, fmt.Errorf("session %s not found", sessionID)
@@ -304,9 +337,10 @@ func GetRecommendations(sessionID string, limit int) ([]Session, error) {
 	// Use new room-based logic to find next available sessions
 	nextSessions := FindNextAvailableInEachRoom(state.Day, state.LastEndTime, state.Schedule)
 
-	// Return all room sessions (no artificial limit)
-	// Let LLM handle the sorting and presentation based on user preferences
-	return nextSessions, nil
+	// Filter out long-duration social activities (Hacking Corner, etc.)
+	filteredSessions := filterOutSocialActivities(nextSessions)
+
+	return filteredSessions, nil
 }
 
 // CleanupOldSessions removes sessions older than 24 hours (parallel cleanup)
@@ -318,7 +352,7 @@ func CleanupOldSessions() {
 	var wg sync.WaitGroup
 	cleanedCounts := make([]int, NumShards)
 
-	for i := 0; i < NumShards; i++ {
+	for i := range NumShards {
 		wg.Add(1)
 		go func(shardIndex int) {
 			defer wg.Done()
@@ -364,7 +398,7 @@ func GetSessionStats() map[string]any {
 	totalSessions := 0
 	shardStats := make([]int, NumShards)
 
-	for i := 0; i < NumShards; i++ {
+	for i := range NumShards {
 		shard := sessionShards[i]
 		shard.mu.RLock()
 		count := len(shard.sessions)
@@ -413,7 +447,7 @@ func generateTimelineView(state *UserState) string {
 	copy(sortedSchedule, state.Schedule)
 
 	// Simple bubble sort by start time
-	for i := 0; i < len(sortedSchedule); i++ {
+	for i := range sortedSchedule {
 		for j := i + 1; j < len(sortedSchedule); j++ {
 			if timeToMinutes(sortedSchedule[i].Start) > timeToMinutes(sortedSchedule[j].Start) {
 				sortedSchedule[i], sortedSchedule[j] = sortedSchedule[j], sortedSchedule[i]
@@ -503,6 +537,14 @@ func GetNextSessionWithTime(sessionID string, timeProvider TimeProvider) (map[st
 		return nil, fmt.Errorf("session %s not found", sessionID)
 	}
 
+	// Get current time from provider
+	now := timeProvider.Now()
+	
+	// Check if within COSCUP period
+	if !isInCOSCUPPeriod(now) {
+		return buildOutsideCOSCUPPeriodResponse(), nil
+	}
+
 	// If no schedule planned yet
 	if len(state.Schedule) == 0 {
 		return map[string]any{
@@ -511,8 +553,8 @@ func GetNextSessionWithTime(sessionID string, timeProvider TimeProvider) (map[st
 		}, nil
 	}
 
-	// Get current time from provider
-	currentTime := timeProvider.GetCurrentTime()
+	// Format time for session analysis
+	currentTime := formatTimeForSession(now)
 	currentStatus := analyzeCurrentStatus(state, currentTime)
 
 	switch currentStatus.Status {
@@ -529,17 +571,14 @@ func GetNextSessionWithTime(sessionID string, timeProvider TimeProvider) (map[st
 		}
 
 		// Before returning complete status, check if there are still sessions available to choose
-		// Only do this check if COSCUP data is properly loaded (not in test environment)
-		if sessionsLoaded {
-			nextSessions := FindNextAvailableInEachRoom(state.Day, state.LastEndTime, state.Schedule)
-			if len(nextSessions) > 0 {
-				// There are still sessions available, suggest continuing planning
-				return map[string]any{
-					"status":             "planning_available",
-					"message":            fmt.Sprintf("您目前已安排 %d 個議程，結束時間是 %s。系統發現還有 %d 個時段可以選擇更多議程。\n\n**重要提示給 LLM：請主動詢問用戶：**\n1. 是否滿意目前的規劃想要結束？請使用 finish_planning 工具\n2. 還是想要查看更多議程選項？請使用 get_options 工具\n\n請根據用戶回應採取相應行動，主動引導用戶做出選擇，不要讓用戶自己決定使用哪個工具。", len(state.Schedule), state.LastEndTime, len(nextSessions)),
-					"available_sessions": len(nextSessions),
-				}, nil
-			}
+		nextSessions := FindNextAvailableInEachRoom(state.Day, state.LastEndTime, state.Schedule)
+		if len(nextSessions) > 0 {
+			// There are still sessions available, suggest continuing planning
+			return map[string]any{
+				"status":             "planning_available",
+				"message":            fmt.Sprintf("您目前已安排 %d 個議程，結束時間是 %s。系統發現還有 %d 個時段可以選擇更多議程。\n\n**重要提示給 LLM：請主動詢問用戶：**\n1. 是否滿意目前的規劃想要結束？請使用 finish_planning 工具\n2. 還是想要查看更多議程選項？請使用 get_options 工具\n\n請根據用戶回應採取相應行動，主動引導用戶做出選擇，不要讓用戶自己決定使用哪個工具。", len(state.Schedule), state.LastEndTime, len(nextSessions)),
+				"available_sessions": len(nextSessions),
+			}, nil
 		}
 		return buildCompleteResponse(currentStatus), nil
 	default:
@@ -552,21 +591,42 @@ func GetNextSessionWithTime(sessionID string, timeProvider TimeProvider) (map[st
 
 // TimeProvider interface for time dependency injection (used in tests)
 type TimeProvider interface {
-	GetCurrentTime() string
-	GetCurrentDay() string
+	Now() time.Time
 }
 
 // RealTimeProvider implements TimeProvider - for demo/testing returns fixed COSCUP time
 type RealTimeProvider struct{}
 
-func (r *RealTimeProvider) GetCurrentTime() string {
-	// For demo/testing, always return 8/9 10:23
-	return "10:23"
+func (r *RealTimeProvider) Now() time.Time {
+	// For demo/testing, always return 2025/8/9 10:23
+	return time.Date(2025, 8, 9, 10, 23, 0, 0, time.UTC)
 }
 
-func (r *RealTimeProvider) GetCurrentDay() string {
-	// For demo/testing, always return Aug9
-	return "Aug9"
+// MockTimeProvider for testing with custom time
+type MockTimeProvider struct {
+	fixedTime time.Time
+}
+
+func (m *MockTimeProvider) Now() time.Time {
+	return m.fixedTime
+}
+
+// Helper functions for time handling
+func formatTimeForSession(t time.Time) string {
+	return t.Format("15:04")
+}
+
+func getCOSCUPDay(t time.Time) string {
+	if t.Year() == 2025 && t.Month() == 8 && t.Day() == 9 {
+		return "Aug9"
+	} else if t.Year() == 2025 && t.Month() == 8 && t.Day() == 10 {
+		return "Aug10"
+	}
+	return "OutsideCOSCUP"
+}
+
+func isInCOSCUPPeriod(t time.Time) bool {
+	return t.Year() == 2025 && t.Month() == 8 && (t.Day() == 9 || t.Day() == 10)
 }
 
 // SessionStatus represents current session status
@@ -714,12 +774,18 @@ func getBuildingFromRoom(room string) string {
 	return "Unknown"
 }
 
-// calculateWalkingTime returns walking time in minutes between rooms
+// calculateWalkingTime returns estimated walking time in minutes between rooms
+// WARNING: These are rough estimates only. Actual travel time may be longer due to:
+// - Crowded hallways during session breaks
+// - Elevator waiting times
+// - Getting lost or needing directions
+// - Physical accessibility needs
 func calculateWalkingTime(fromRoom, toRoom string) int {
 	fromBuilding := getBuildingFromRoom(fromRoom)
 	toBuilding := getBuildingFromRoom(toRoom)
 
-	// Walking times between buildings (minutes)
+	// Estimated walking times between buildings (minutes)
+	// NOTE: These are conservative estimates and actual time may vary
 	walkingTimes := map[string]map[string]int{
 		"AU": {"AU": 1, "RB": 2, "TR": 4},
 		"RB": {"AU": 2, "RB": 1, "TR": 3},
@@ -787,7 +853,7 @@ func buildOngoingResponse(status *SessionStatus) map[string]any {
 			status.NextSession.Title)
 
 		if status.Route != nil && status.Route.WalkingTime > 0 {
-			message += fmt.Sprintf("🚶 移動路線：%s（約 %d 分鐘）",
+			message += fmt.Sprintf("🚶 移動路線：%s（預估 %d 分鐘，實際可能更久）",
 				status.Route.RouteDesc,
 				status.Route.WalkingTime)
 		}
@@ -820,16 +886,16 @@ func buildBreakResponse(status *SessionStatus) map[string]any {
 	if status.Route != nil && status.Route.WalkingTime > 0 {
 		timeBuffer := status.BreakMinutes - status.Route.WalkingTime
 		if timeBuffer > 5 {
-			message += fmt.Sprintf("🚶 移動建議：%s（約 %d 分鐘）\n✅ 時間很充裕，您還有 %d 分鐘可以休息或逛攤位。",
+			message += fmt.Sprintf("🚶 移動建議：%s（預估 %d 分鐘，實際可能更久）\n✅ 時間很充裕，您還有 %d 分鐘可以休息或逛攤位。",
 				status.Route.RouteDesc,
 				status.Route.WalkingTime,
 				timeBuffer)
 		} else if timeBuffer > 0 {
-			message += fmt.Sprintf("🚶 移動建議：%s（約 %d 分鐘）\n⏱️ 建議現在就開始移動。",
+			message += fmt.Sprintf("🚶 移動建議：%s（預估 %d 分鐘，實際可能更久）\n⏱️ 建議現在就開始移動。",
 				status.Route.RouteDesc,
 				status.Route.WalkingTime)
 		} else {
-			message += fmt.Sprintf("🚶 移動建議：%s（約 %d 分鐘）\n🏃 時間較緊迫，建議立即前往！",
+			message += fmt.Sprintf("🚶 移動建議：%s（預估 %d 分鐘，實際可能更久）\n🏃 時間較緊迫，建議立即前往！",
 				status.Route.RouteDesc,
 				status.Route.WalkingTime)
 		}
@@ -859,11 +925,11 @@ func buildJustEndedResponse(status *SessionStatus) map[string]any {
 	if status.Route != nil && status.Route.WalkingTime > 0 {
 		timeBuffer := status.BreakMinutes - status.Route.WalkingTime
 		if timeBuffer > 5 {
-			message += fmt.Sprintf("🚶 移動路線：%s（約 %d 分鐘）\n😌 時間充裕，可以先休息一下再出發。",
+			message += fmt.Sprintf("🚶 移動路線：%s（預估 %d 分鐘，實際可能更久）\n😌 時間充裕，可以先休息一下再出發。",
 				status.Route.RouteDesc,
 				status.Route.WalkingTime)
 		} else {
-			message += fmt.Sprintf("🚶 移動路線：%s（約 %d 分鐘）\n⏰ 建議現在就開始移動。",
+			message += fmt.Sprintf("🚶 移動路線：%s（預估 %d 分鐘，實際可能更久）\n⏰ 建議現在就開始移動。",
 				status.Route.RouteDesc,
 				status.Route.WalkingTime)
 		}
@@ -880,6 +946,54 @@ func buildCompleteResponse(status *SessionStatus) map[string]any {
 		"status":  "schedule_complete",
 		"message": "🎉 恭喜！您今天的所有議程都已完成。希望您在 COSCUP 2025 度過了充實的一天！\n\n您可以：\n- 逛逛攤位區域\n- 參加 BoF 活動\n- 與其他與會者交流",
 	}
+}
+
+func buildOutsideCOSCUPPeriodResponse() map[string]any {
+	return map[string]any{
+		"status":  "outside_coscup_period",
+		"message": "🗓️ 目前不在 COSCUP 2025 活動期間內（8月9-10日）。\n\n如果您想：\n- 📋 查看已規劃的議程：使用 get_schedule\n- 🔍 瀏覽議程資訊：使用 get_session_detail 加上議程代碼\n- 📍 查看會場資訊：使用 get_venue_map\n\n期待與您在 COSCUP 2025 相見！",
+	}
+}
+
+// filterOutSocialActivities removes long-duration social activities from recommendations
+// These are typically 4+ hour activities like Hacking Corner that aren't traditional talks
+func filterOutSocialActivities(sessions []Session) []Session {
+	if len(sessions) == 0 {
+		return sessions
+	}
+
+	var filtered []Session
+	for _, session := range sessions {
+		// Skip if it's a long-duration social activity
+		if isSocialActivity(session) {
+			continue
+		}
+		filtered = append(filtered, session)
+	}
+	return filtered
+}
+
+// isSocialActivity checks if a session is a long-duration social activity
+func isSocialActivity(session Session) bool {
+	// Check for Hacking Corner activities
+	if strings.Contains(session.Title, "Hacking Corner") {
+		return true
+	}
+
+	// Check for activities in hallways (social spaces)
+	if strings.Contains(session.Room, "Hallway") {
+		return true
+	}
+
+	// Check for very long sessions (4+ hours = 240+ minutes)
+	startMin := timeToMinutes(session.Start)
+	endMin := timeToMinutes(session.End)
+	duration := endMin - startMin
+	if duration >= 240 { // 4 hours or more
+		return true
+	}
+
+	return false
 }
 
 // removeAbstractFromSessions creates a copy of sessions with abstract fields cleared
@@ -899,11 +1013,6 @@ func removeAbstractFromSessions(sessions []Session) []Session {
 
 // FindRoomSessions returns all sessions for a specific room on a given day
 func FindRoomSessions(day, room string) []Session {
-	if !sessionsLoaded {
-		if err := LoadCOSCUPData(); err != nil {
-			return nil
-		}
-	}
 
 	var roomSessions []Session
 	for _, session := range sessionsByDay[day] {

@@ -83,7 +83,7 @@ func handleStartPlanning(ctx context.Context, request mcp.CallToolRequest) (*mcp
 func createChooseSessionTool() mcp.Tool {
 	return mcp.NewTool(
 		"choose_session",
-		mcp.WithDescription(sessionIdWarning+"Record user's selected session to their schedule. After selection, show next available sessions grouped by topic tags. Include basic info for technical sessions, simplified info for social/long sessions. Remind users they can ask for session details by providing the session code. Display all next_options returned. Use user's preferred language."),
+		mcp.WithDescription(sessionIdWarning+"**SESSION SELECTION TOOL** - Record user's selected session to their schedule.\n\nUSE WHEN USER PROVIDES:\n- Session code directly: 'XUK7ZL', 'select XUK7ZL', 'choose XUK7ZL'\n- Clear selection intent: 'I want this session', '我要選這個', '我要聽這場'\n- Selection commands: '我要聽 [CODE]', '加入 [CODE]', 'pick [CODE]'\n- Accepts specific session: 'yes, I want that one', '好，就選這個'\n\nAfter selection, show next available sessions grouped by topic tags. Include basic info for technical sessions, simplified info for social/long sessions. Remind users they can ask for session details by providing the session code. Display all next_options returned. Use user's preferred language."),
 		mcp.WithString("sessionId",
 			mcp.Description("User's session ID"),
 		),
@@ -110,8 +110,7 @@ func handleChooseSession(ctx context.Context, request mcp.CallToolRequest) (*mcp
 	callReason := request.GetString("callReason", "")
 
 	// Add session to user's schedule
-	err = AddSessionToSchedule(sessionID, sessionCode)
-	if err != nil {
+	if err = AddSessionToSchedule(sessionID, sessionCode); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Error: %s", err.Error())), nil
 	}
 
@@ -122,7 +121,10 @@ func handleChooseSession(ctx context.Context, request mcp.CallToolRequest) (*mcp
 	}
 
 	// Get next recommendations
-	recommendations, _ := GetRecommendations(sessionID, 5)
+	recommendations, err := GetRecommendations(sessionID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Error: %s", err.Error())), nil
+	}
 
 	var nextMessage string
 	if len(recommendations) == 0 {
@@ -132,7 +134,7 @@ func handleChooseSession(ctx context.Context, request mcp.CallToolRequest) (*mcp
 			nextMessage = "No more sessions available to choose from at this time."
 		}
 	} else {
-		nextMessage = fmt.Sprintf("Selection recorded! Found %d available sessions. Please show all sessions grouped by topic tags. For technical sessions, include basic info (code, title, time, room, speaker, difficulty). For social/long sessions, show simplified info (code, title, room). Remind users they can ask for details about any session by providing the session code.", len(recommendations))
+		nextMessage = fmt.Sprintf("Selection recorded! You have %d available sessions to choose from. IMPORTANT: Display ALL sessions from next_options. Group sessions by their tags for better organization. Include session code, title, time, room, and speaker for each session. Users can request detailed information for any session by providing its code.", len(recommendations))
 	}
 
 	data := map[string]any{
@@ -150,12 +152,12 @@ func handleChooseSession(ctx context.Context, request mcp.CallToolRequest) (*mcp
 func createGetOptionsTool() mcp.Tool {
 	return mcp.NewTool(
 		"get_options",
-		mcp.WithDescription(sessionIdWarning+"Get user's current available session options. Show sessions grouped by topic tags. Include basic info for technical sessions, simplified info for social/long sessions. Remind users they can ask for session details by providing the session code. Display all sessions returned. Use user's preferred language."),
+		mcp.WithDescription(sessionIdWarning+"**CONTINUATION PLANNING TOOL** - Use when user wants to continue/resume schedule planning and select additional sessions.\n\nPRIMARY USE CASES:\n- User wants to continue planning after partial schedule: '繼續選擇議程', 'continue selecting', 'keep planning', '我想要繼續選擇'\n- User finished other activities and wants to resume planning\n- User asks for more session options: '更多選項', 'what else can I choose', '還有什麼可以選'\n- User wants to extend current schedule: 'what's next to add', '下一個時段', '接下來可以選什麼'\n\nThis tool finds sessions that start AFTER user's current schedule end time. Show sessions grouped by topic tags. Include basic info for technical sessions, simplified info for social/long sessions. Remind users they can ask for session details by providing the session code. Display all sessions returned. Use user's preferred language."),
 		mcp.WithString("sessionId",
 			mcp.Description("User's session ID"),
 		),
 		mcp.WithString("callReason",
-			mcp.Description("Explain why you need to get options, e.g., need to recommend next timeslot sessions"),
+			mcp.Description("Explain why you need to get options for continuation planning, e.g., user wants to continue selecting sessions after current schedule"),
 		),
 	)
 }
@@ -173,7 +175,7 @@ func handleGetOptions(ctx context.Context, request mcp.CallToolRequest) (*mcp.Ca
 		return mcp.NewToolResultError("Error: cannot find specified session"), nil
 	}
 
-	recommendations, err := GetRecommendations(sessionID, 5)
+	recommendations, err := GetRecommendations(sessionID)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Error: %s", err.Error())), nil
 	}
@@ -182,7 +184,7 @@ func handleGetOptions(ctx context.Context, request mcp.CallToolRequest) (*mcp.Ca
 	if len(recommendations) == 0 {
 		message = "No sessions currently available to choose from. May have completed today's planning or no more suitable timeslots available."
 	} else {
-		message = fmt.Sprintf("Found %d available sessions. Please show all sessions grouped by topic tags. For technical sessions, include basic info (code, title, time, room, speaker, difficulty). For social/long sessions, show simplified info (code, title, room). Consider user interests: %v. Remind users they can ask for details about any session by providing the session code.", len(recommendations), state.Profile)
+		message = fmt.Sprintf("Found %d available sessions for your next timeslot. IMPORTANT: Display ALL sessions from the options array. Group sessions by their tags for better organization. Include session code, title, time, room, and speaker for each session. Consider user interests: %v. Users can request detailed information for any session by providing its code.", len(recommendations), state.Profile)
 	}
 
 	data := map[string]any{
@@ -215,9 +217,15 @@ func createGetScheduleTool() mcp.Tool {
 func createGetNextSessionTool() mcp.Tool {
 	return mcp.NewTool(
 		"get_next_session",
-		mcp.WithDescription(sessionIdWarning+`Get user's next scheduled session information with navigation advice. Use when user asks:
+		mcp.WithDescription(sessionIdWarning+`**STATUS CHECK TOOL** - Get user's current session status and navigation advice for their EXISTING schedule.
+
+USE WHEN USER ASKS ABOUT CURRENT STATUS:
 - "what's next" / "where should I go" / "next session"
 - "what time is my next talk" / "where do I need to be"
+- "現在是什麼狀況" / "下一場在哪裡" / "該去哪"
+
+IMPORTANT: This is for checking status of ALREADY PLANNED sessions, NOT for adding new sessions.
+If user wants to add more sessions, use get_options instead.
 
 The tool automatically analyzes current status:
 - 🎯 Ongoing session: Shows remaining time, previews next session
@@ -230,7 +238,7 @@ If user hasn't planned their schedule yet, guide them to use start_planning to b
 			mcp.Description("User's session ID"),
 		),
 		mcp.WithString("callReason",
-			mcp.Description("Explain why you are calling this tool, e.g., user asks what's next"),
+			mcp.Description("Explain why you are calling this tool, e.g., user asks what's next in their current schedule"),
 		),
 	)
 }
@@ -421,7 +429,7 @@ func handleHelp(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
 
 🗓️ 管理行程  
    • 查看行程：查看完整的議程時間軸安排
-   • 議程詳情：獲取特定議程的詳細資訊和完整摘要
+   • 議程詳情：獲取特定議程的詳細資訊
    • 結束規劃：隨時結束規劃並確定最終行程
 
 🧭 當天導航
@@ -440,7 +448,7 @@ func handleHelp(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
    • 路線指引：尋找路線和無障礙通道
 
 💡 使用範例：
-   "幫我規劃 8/9 的 COSCUP 行程"
+   "幫我安排 Aug.9 COSCUP 的行程" 或 "幫我安排 Aug.10 COSCUP 的行程"
    "我想參加 AI 相關的議程"
    "現在下一場在哪裡？"
    "查看我今天的完整行程"
@@ -566,7 +574,8 @@ func handleGetRoomSchedule(ctx context.Context, request mcp.CallToolRequest) (*m
 	day := request.GetString("day", "")
 	if day == "" {
 		timeProvider := &RealTimeProvider{}
-		day = timeProvider.GetCurrentDay()
+		now := timeProvider.Now()
+		day = getCOSCUPDay(now)
 	}
 	if !IsValidDay(day) {
 		return mcp.NewToolResultError("Error: day must be 'Aug9' or 'Aug10'"), nil
@@ -581,7 +590,8 @@ func handleGetRoomSchedule(ctx context.Context, request mcp.CallToolRequest) (*m
 
 	// Get current time for time-based queries
 	timeProvider := &RealTimeProvider{}
-	currentTime := timeProvider.GetCurrentTime()
+	now := timeProvider.Now()
+	currentTime := formatTimeForSession(now)
 
 	// Get room sessions
 	roomSessions := FindRoomSessions(internalDay, room)

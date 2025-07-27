@@ -493,8 +493,8 @@ func TestGetNextSessionWithTime(t *testing.T) {
 		{
 			name:           "After all sessions",
 			mockTime:       "12:00",
-			expectedStatus: "schedule_complete",
-			expectedFields: []string{},
+			expectedStatus: "planning_available", // System finds more available sessions
+			expectedFields: []string{"available_sessions"},
 		},
 		{
 			name:           "Before any session",
@@ -1000,11 +1000,11 @@ func TestCompletePlanningFlow(t *testing.T) {
 	testutil.AssertNoError(t, err, "Should not return error")
 	testutil.AssertNotNil(t, result, "Result should not be nil")
 
-	// Should trigger planning_available since IsCompleted is false and no real session data
+	// Should trigger planning_available since IsCompleted is false and there are available sessions
 	status, ok := result["status"].(string)
 	testutil.AssertEqual(t, true, ok, "Status should be string")
-	// In test environment without sessionsLoaded, should return schedule_complete
-	testutil.AssertEqual(t, "schedule_complete", status, "Should return schedule_complete in test environment")
+	// System correctly identifies available sessions and suggests continuing planning
+	testutil.AssertEqual(t, "planning_available", status, "Should return planning_available when sessions are available")
 
 	// Step 4: Finish planning
 	err = FinishPlanning(testSessionID)
@@ -1075,7 +1075,7 @@ func TestPlanningAvailableStatusTrigger(t *testing.T) {
 		{
 			name:           "After session with available slots",
 			currentTime:    "10:00",
-			expectedStatus: "schedule_complete", // In test env without sessionsLoaded
+			expectedStatus: "planning_available", // System finds available sessions
 			description:    "Should check for available sessions after completing planned ones",
 		},
 	}
@@ -1226,7 +1226,6 @@ func TestFinishPlanningWithDifferentScheduleSizes(t *testing.T) {
 func TestFindRoomSessions(t *testing.T) {
 	// Mock session data for testing
 	originalSessionsByDay := sessionsByDay
-	originalSessionsLoaded := sessionsLoaded
 
 	// Setup test data
 	sessionsByDay = map[string][]Session{
@@ -1275,12 +1274,10 @@ func TestFindRoomSessions(t *testing.T) {
 			},
 		},
 	}
-	sessionsLoaded = true
 
 	// Restore original data after test
 	defer func() {
 		sessionsByDay = originalSessionsByDay
-		sessionsLoaded = originalSessionsLoaded
 	}()
 
 	tests := []struct {
@@ -1392,16 +1389,13 @@ func TestGetCurrentRoomSession(t *testing.T) {
 
 	// Mock FindRoomSessions to return our test data
 	originalSessionsByDay := sessionsByDay
-	originalSessionsLoaded := sessionsLoaded
 
 	sessionsByDay = map[string][]Session{
 		"TestDay": testSessions,
 	}
-	sessionsLoaded = true
 
 	defer func() {
 		sessionsByDay = originalSessionsByDay
-		sessionsLoaded = originalSessionsLoaded
 	}()
 
 	tests := []struct {
@@ -1505,16 +1499,13 @@ func TestGetNextRoomSession(t *testing.T) {
 
 	// Mock FindRoomSessions
 	originalSessionsByDay := sessionsByDay
-	originalSessionsLoaded := sessionsLoaded
 
 	sessionsByDay = map[string][]Session{
 		"TestDay": testSessions,
 	}
-	sessionsLoaded = true
 
 	defer func() {
 		sessionsByDay = originalSessionsByDay
-		sessionsLoaded = originalSessionsLoaded
 	}()
 
 	tests := []struct {
@@ -1602,14 +1593,11 @@ func TestRoomScheduleEdgeCases(t *testing.T) {
 
 	// Test with empty session data
 	originalSessionsByDay := sessionsByDay
-	originalSessionsLoaded := sessionsLoaded
 
 	sessionsByDay = map[string][]Session{}
-	sessionsLoaded = true
 
 	defer func() {
 		sessionsByDay = originalSessionsByDay
-		sessionsLoaded = originalSessionsLoaded
 	}()
 
 	t.Run("Empty session data", func(t *testing.T) {
@@ -1640,16 +1628,13 @@ func TestRoomScheduleTimeEdgeCases(t *testing.T) {
 	}
 
 	originalSessionsByDay := sessionsByDay
-	originalSessionsLoaded := sessionsLoaded
 
 	sessionsByDay = map[string][]Session{
 		"EdgeDay": testSessions,
 	}
-	sessionsLoaded = true
 
 	defer func() {
 		sessionsByDay = originalSessionsByDay
-		sessionsLoaded = originalSessionsLoaded
 	}()
 
 	tests := []struct {
@@ -1757,16 +1742,13 @@ func TestRoomScheduleMultipleRoomsData(t *testing.T) {
 	}
 
 	originalSessionsByDay := sessionsByDay
-	originalSessionsLoaded := sessionsLoaded
 
 	sessionsByDay = map[string][]Session{
 		"MixedDay": mixedSessions,
 	}
-	sessionsLoaded = true
 
 	defer func() {
 		sessionsByDay = originalSessionsByDay
-		sessionsLoaded = originalSessionsLoaded
 	}()
 
 	t.Run("Filter TR211 sessions", func(t *testing.T) {
