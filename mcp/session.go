@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -25,14 +27,13 @@ type UserState struct {
 
 // Response represents the standard MCP tool response
 type Response struct {
-	Success    bool   `json:"success"`
-	Data       any    `json:"data"`
-	CallReason string `json:"call_reason"`
-	Message    string `json:"message"`
+	Success bool   `json:"success"`
+	Data    any    `json:"data"`
+	Message string `json:"message"`
 }
 
 // buildStandardResponse creates a standardized response with sessionID always included
-func buildStandardResponse(sessionID string, data map[string]any, message string, callReason string) Response {
+func buildStandardResponse(sessionID string, data map[string]any, message string) Response {
 	// Ensure sessionId is always in the response
 	if data == nil {
 		data = make(map[string]any)
@@ -40,15 +41,14 @@ func buildStandardResponse(sessionID string, data map[string]any, message string
 	data["sessionId"] = sessionID
 
 	return Response{
-		Success:    true,
-		Data:       data,
-		CallReason: callReason,
-		Message:    message,
+		Success: true,
+		Data:    data,
+		Message: message,
 	}
 }
 
-// Simple sharded storage with 16 shards for better concurrency
-const NumShards = 16
+// Simple sharded storage for better concurrency
+const NumShards = DefaultNumShards
 
 type SessionShard struct {
 	mu       sync.RWMutex
@@ -202,10 +202,10 @@ func AddSessionToSchedule(sessionID, sessionCode string) error {
 			}
 			conflictList += fmt.Sprintf("%s-%s %s", conflict.Start, conflict.End, conflict.Title)
 		}
-		
-		log.Printf("[%s] Time conflict detected for session %s (%s-%s)", 
+
+		log.Printf("[%s] Time conflict detected for session %s (%s-%s)",
 			sessionID, sessionCode, session.Start, session.End)
-		return fmt.Errorf("時間衝突：您選擇的議程 %s-%s「%s」與已安排的議程重疊：%s。請選擇其他時段的議程", 
+		return fmt.Errorf("時間衝突：您選擇的議程 %s-%s「%s」與已安排的議程重疊：%s。請選擇其他時段的議程",
 			session.Start, session.End, session.Title, conflictList)
 	}
 
@@ -230,12 +230,22 @@ func AddSessionToSchedule(sessionID, sessionCode string) error {
 
 // addToProfile adds a track to user's profile if not already present
 func addToProfile(state *UserState, track string) {
-	for _, existing := range state.Profile {
-		if existing == track {
-			return // already in profile
-		}
+	if slices.Contains(state.Profile, track) {
+		return // already in profile
 	}
 	state.Profile = append(state.Profile, track)
+}
+
+// getSimplifiedSessions creates safe copies of sessions and clears fields not needed for list display
+func getSimplifiedSessions(sessions []Session) []Session {
+	// Create safe copies since sessionsByDay is global data - avoid modifying original sessions
+	result := make([]Session, len(sessions))
+	for i, session := range sessions {
+		result[i] = session
+		result[i].Abstract = ""   // Clear abstract to reduce response size
+		result[i].Difficulty = "" // Clear difficulty to reduce response size
+	}
+	return result
 }
 
 // FinishPlanning marks user's planning as completed
@@ -267,7 +277,7 @@ func FindNextAvailableInEachRoom(day, afterTime string, userSchedule []Session) 
 		copy(roomSessionsSorted, sessions)
 
 		// Simple bubble sort by start time
-		for i := 0; i < len(roomSessionsSorted); i++ {
+		for i := range roomSessionsSorted {
 			for j := i + 1; j < len(roomSessionsSorted); j++ {
 				if timeToMinutes(roomSessionsSorted[i].Start) > timeToMinutes(roomSessionsSorted[j].Start) {
 					roomSessionsSorted[i], roomSessionsSorted[j] = roomSessionsSorted[j], roomSessionsSorted[i]
@@ -291,7 +301,7 @@ func FindNextAvailableInEachRoom(day, afterTime string, userSchedule []Session) 
 		}
 	}
 
-	return nextSessions
+	return getSimplifiedSessions(nextSessions)
 }
 
 // hasConflictWithSchedule checks if session conflicts with user's existing schedule
@@ -343,9 +353,9 @@ func GetRecommendations(sessionID string) ([]Session, error) {
 	return filteredSessions, nil
 }
 
-// CleanupOldSessions removes sessions older than 24 hours (parallel cleanup)
+// CleanupOldSessions removes sessions older than configured hours (parallel cleanup)
 func CleanupOldSessions() {
-	cutoff := time.Now().Add(-24 * time.Hour)
+	cutoff := time.Now().Add(-SessionCleanupHours * time.Hour)
 	totalCleaned := 0
 
 	// Clean each shard in parallel
@@ -539,7 +549,7 @@ func GetNextSessionWithTime(sessionID string, timeProvider TimeProvider) (map[st
 
 	// Get current time from provider
 	now := timeProvider.Now()
-	
+
 	// Check if within COSCUP period
 	if !isInCOSCUPPeriod(now) {
 		return buildOutsideCOSCUPPeriodResponse(), nil
@@ -598,8 +608,8 @@ type TimeProvider interface {
 type RealTimeProvider struct{}
 
 func (r *RealTimeProvider) Now() time.Time {
-	// For demo/testing, always return 2025/8/9 10:23
-	return time.Date(2025, 8, 9, 10, 23, 0, 0, time.UTC)
+	// For demo/testing, always return COSCUP demo time
+	return time.Date(COSCUPYear, COSCUPMonth, COSCUPDay1, DemoHour, DemoMinute, 0, 0, time.UTC)
 }
 
 // MockTimeProvider for testing with custom time
@@ -617,16 +627,16 @@ func formatTimeForSession(t time.Time) string {
 }
 
 func getCOSCUPDay(t time.Time) string {
-	if t.Year() == 2025 && t.Month() == 8 && t.Day() == 9 {
-		return "Aug9"
-	} else if t.Year() == 2025 && t.Month() == 8 && t.Day() == 10 {
-		return "Aug10"
+	if t.Year() == COSCUPYear && t.Month() == COSCUPMonth && t.Day() == COSCUPDay1 {
+		return DayAug9
+	} else if t.Year() == COSCUPYear && t.Month() == COSCUPMonth && t.Day() == COSCUPDay2 {
+		return DayAug10
 	}
-	return "OutsideCOSCUP"
+	return StatusOutsideCOSCUP
 }
 
 func isInCOSCUPPeriod(t time.Time) bool {
-	return t.Year() == 2025 && t.Month() == 8 && (t.Day() == 9 || t.Day() == 10)
+	return t.Year() == COSCUPYear && t.Month() == COSCUPMonth && (t.Day() == COSCUPDay1 || t.Day() == COSCUPDay2)
 }
 
 // SessionStatus represents current session status
@@ -762,14 +772,14 @@ func calculateRoute(fromSession, toSession *Session) *RouteInfo {
 
 // getBuildingFromRoom returns building code from room name
 func getBuildingFromRoom(room string) string {
-	if room == "AU" || room == "AU101" {
-		return "AU"
+	if room == BuildingAU || room == "AU101" {
+		return BuildingAU
 	}
 	if room == "RB-101" || room == "RB-102" || room == "RB-105" {
-		return "RB"
+		return BuildingRB
 	}
-	if len(room) >= 2 && room[:2] == "TR" {
-		return "TR"
+	if len(room) >= 2 && room[:2] == BuildingTR {
+		return BuildingTR
 	}
 	return "Unknown"
 }
@@ -787,9 +797,9 @@ func calculateWalkingTime(fromRoom, toRoom string) int {
 	// Estimated walking times between buildings (minutes)
 	// NOTE: These are conservative estimates and actual time may vary
 	walkingTimes := map[string]map[string]int{
-		"AU": {"AU": 1, "RB": 2, "TR": 4},
-		"RB": {"AU": 2, "RB": 1, "TR": 3},
-		"TR": {"AU": 4, "RB": 3, "TR": 2}, // Between different floors in TR
+		BuildingAU: {BuildingAU: SameBuildingWalkTime, BuildingRB: AUToRBWalkTime, BuildingTR: AUToTRWalkTime},
+		BuildingRB: {BuildingAU: RBToAUWalkTime, BuildingRB: RBToRBWalkTime, BuildingTR: RBToTRWalkTime},
+		BuildingTR: {BuildingAU: TRToAUWalkTime, BuildingRB: TRToRBWalkTime, BuildingTR: TRInternalWalkTime},
 	}
 
 	if times, exists := walkingTimes[fromBuilding]; exists {
@@ -798,7 +808,7 @@ func calculateWalkingTime(fromRoom, toRoom string) int {
 		}
 	}
 
-	return 5 // Default safe estimate
+	return UnknownWalkTime // Default safe estimate
 }
 
 // generateRouteDescription generates human-readable route description
@@ -985,30 +995,15 @@ func isSocialActivity(session Session) bool {
 		return true
 	}
 
-	// Check for very long sessions (4+ hours = 240+ minutes)
+	// Check for very long sessions
 	startMin := timeToMinutes(session.Start)
 	endMin := timeToMinutes(session.End)
 	duration := endMin - startMin
-	if duration >= 240 { // 4 hours or more
+	if duration >= LongSessionMinutes {
 		return true
 	}
 
 	return false
-}
-
-// removeAbstractFromSessions creates a copy of sessions with abstract fields cleared
-// This reduces response size for initial session listing while preserving structure
-func removeAbstractFromSessions(sessions []Session) []Session {
-	if len(sessions) == 0 {
-		return sessions
-	}
-
-	result := make([]Session, len(sessions))
-	for i, session := range sessions {
-		result[i] = session
-		result[i].Abstract = "" // Clear abstract to reduce response size
-	}
-	return result
 }
 
 // FindRoomSessions returns all sessions for a specific room on a given day
@@ -1021,16 +1016,14 @@ func FindRoomSessions(day, room string) []Session {
 		}
 	}
 
-	// Sort by start time
-	for i := 0; i < len(roomSessions); i++ {
-		for j := i + 1; j < len(roomSessions); j++ {
-			if timeToMinutes(roomSessions[i].Start) > timeToMinutes(roomSessions[j].Start) {
-				roomSessions[i], roomSessions[j] = roomSessions[j], roomSessions[i]
-			}
-		}
-	}
+	result := getSimplifiedSessions(roomSessions)
 
-	return roomSessions
+	// Sort by start time using efficient sort.Slice
+	sort.Slice(result, func(i, j int) bool {
+		return timeToMinutes(result[i].Start) < timeToMinutes(result[j].Start)
+	})
+
+	return result
 }
 
 // GetCurrentRoomSession returns the session currently running in a room

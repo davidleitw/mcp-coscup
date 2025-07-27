@@ -827,14 +827,11 @@ func TestBuildStandardResponse(t *testing.T) {
 		"number":    42,
 	}
 	message := "Test message"
-	callReason := "Test call reason"
-
-	result := buildStandardResponse(sessionID, data, message, callReason)
+	result := buildStandardResponse(sessionID, data, message)
 
 	// Check response structure
 	testutil.AssertEqual(t, true, result.Success, "Response should be successful")
 	testutil.AssertEqual(t, message, result.Message, "Message should match")
-	testutil.AssertEqual(t, callReason, result.CallReason, "CallReason should match")
 
 	// Check that sessionId is added to data
 	resultData, ok := result.Data.(map[string]any)
@@ -847,9 +844,8 @@ func TestBuildStandardResponse(t *testing.T) {
 func TestBuildStandardResponseNilData(t *testing.T) {
 	sessionID := "test_session_456"
 	message := "Test message with nil data"
-	callReason := "Test nil data"
 
-	result := buildStandardResponse(sessionID, nil, message, callReason)
+	result := buildStandardResponse(sessionID, nil, message)
 
 	// Check that data is created and sessionId is added
 	resultData, ok := result.Data.(map[string]any)
@@ -858,51 +854,92 @@ func TestBuildStandardResponseNilData(t *testing.T) {
 	testutil.AssertEqual(t, 1, len(resultData), "Data should only contain sessionId")
 }
 
-func TestRemoveAbstractFromSessions(t *testing.T) {
-	originalSessions := []Session{
-		{
-			Code:     "TEST001",
-			Title:    "Test Session 1",
-			Abstract: "This is a long abstract that should be removed",
-			Room:     "AU",
-			Start:    "10:00",
-			End:      "10:30",
-		},
-		{
-			Code:     "TEST002",
-			Title:    "Test Session 2",
-			Abstract: "Another abstract to be removed",
-			Room:     "RB-105",
-			Start:    "11:00",
-			End:      "11:30",
-		},
+func TestGetFirstSessionClearsAbstract(t *testing.T) {
+	// Test that GetFirstSession returns sessions with cleared abstracts
+	firstSessions := GetFirstSession("Aug.10")
+	if len(firstSessions) == 0 {
+		t.Skip("No sessions found for Aug.10 - skipping abstract test")
+		return
 	}
 
-	result := removeAbstractFromSessions(originalSessions)
+	// All returned sessions should have empty abstracts
+	for i, session := range firstSessions {
+		testutil.AssertEqual(t, "", session.Abstract, fmt.Sprintf("Session %d abstract should be empty", i))
+		// But other fields should be present
+		if session.Code == "" {
+			t.Errorf("Session %d code should not be empty", i)
+		}
+		if session.Title == "" {
+			t.Errorf("Session %d title should not be empty", i)
+		}
+	}
+}
 
-	// Check that we got the same number of sessions
-	testutil.AssertEqual(t, len(originalSessions), len(result), "Should return same number of sessions")
-
-	// Check that abstracts are cleared but other fields preserved
-	for i, session := range result {
-		testutil.AssertEqual(t, "", session.Abstract, "Abstract should be empty")
-		testutil.AssertEqual(t, originalSessions[i].Code, session.Code, "Code should be preserved")
-		testutil.AssertEqual(t, originalSessions[i].Title, session.Title, "Title should be preserved")
-		testutil.AssertEqual(t, originalSessions[i].Room, session.Room, "Room should be preserved")
-		testutil.AssertEqual(t, originalSessions[i].Start, session.Start, "Start time should be preserved")
-		testutil.AssertEqual(t, originalSessions[i].End, session.End, "End time should be preserved")
+func TestFindRoomSessionsClearsAbstract(t *testing.T) {
+	// Test that FindRoomSessions returns sessions with cleared abstracts
+	roomSessions := FindRoomSessions("Aug.10", "AU")
+	if len(roomSessions) == 0 {
+		t.Skip("No sessions found for AU on Aug.10 - skipping abstract test")
+		return
 	}
 
-	// Check that original sessions are not modified
-	testutil.AssertEqual(t, "This is a long abstract that should be removed", originalSessions[0].Abstract, "Original sessions should not be modified")
+	// All returned sessions should have empty abstracts
+	for i, session := range roomSessions {
+		testutil.AssertEqual(t, "", session.Abstract, fmt.Sprintf("Session %d abstract should be empty", i))
+		testutil.AssertEqual(t, "AU", session.Room, fmt.Sprintf("Session %d should be in AU room", i))
+		// But other fields should be present
+		if session.Code == "" {
+			t.Errorf("Session %d code should not be empty", i)
+		}
+	}
 }
 
-func TestRemoveAbstractFromSessionsEmpty(t *testing.T) {
-	emptySessions := []Session{}
-	result := removeAbstractFromSessions(emptySessions)
+func TestFindSessionByCodePreservesAbstract(t *testing.T) {
+	// Test that FindSessionByCode returns sessions with complete abstract (unlike list functions)
+	// Use a known session code from embedded data
+	session := FindSessionByCode("FKNDCY")
+	if session == nil {
+		t.Skip("Session FKNDCY not found - skipping abstract preservation test")
+		return
+	}
 
-	testutil.AssertEqual(t, 0, len(result), "Should handle empty session list")
+	// This session should have complete data including abstract
+	testutil.AssertEqual(t, "FKNDCY", session.Code, "Session code should match")
+	if session.Title == "" {
+		t.Errorf("Session title should not be empty")
+	}
+	// Abstract should be preserved for detailed view (unlike list functions that clear it)
+	if session.Abstract == "" {
+		t.Errorf("Session abstract should be preserved for detailed queries")
+	}
 }
+
+func TestFindSessionByCodeReturnsCopy(t *testing.T) {
+	// Test that FindSessionByCode returns a safe copy, not a pointer to global data
+	session1 := FindSessionByCode("FKNDCY")
+	session2 := FindSessionByCode("FKNDCY")
+	
+	if session1 == nil || session2 == nil {
+		t.Skip("Session FKNDCY not found - skipping copy test")
+		return
+	}
+
+	// Should be different pointers (different copies)
+	if session1 == session2 {
+		t.Errorf("FindSessionByCode should return different copies, not the same pointer")
+	}
+
+	// But should have identical content
+	testutil.AssertEqual(t, session1.Code, session2.Code, "Copies should have identical content")
+	testutil.AssertEqual(t, session1.Title, session2.Title, "Copies should have identical content")
+	testutil.AssertEqual(t, session1.Abstract, session2.Abstract, "Copies should have identical content")
+
+	// Modifying one copy should not affect the other
+	originalTitle := session1.Title
+	session1.Title = "Modified Title"
+	testutil.AssertEqual(t, originalTitle, session2.Title, "Modifying one copy should not affect another")
+}
+
 
 func TestFinishPlanning(t *testing.T) {
 	// Create a test session
