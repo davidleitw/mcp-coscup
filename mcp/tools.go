@@ -36,10 +36,7 @@ func createStartPlanningTool() mcp.Tool {
 		mcp.WithDescription("Start planning COSCUP schedule for a specific day. As an LLM, use this tool when user wants to arrange their daily schedule. After using this tool, you will receive the earliest session options for that day. Please introduce these options to the user in a friendly manner in the user's preferred language and ask for their opinion."),
 		mcp.WithString("day",
 			mcp.Description("The day to plan schedule for. Must be 'Aug9' or 'Aug10'"),
-			mcp.Enum("Aug9", "Aug10"),
-		),
-		mcp.WithString("callReason",
-			mcp.Description("Explain why you are calling this tool and what result you expect to get"),
+			mcp.Enum(DayAug9, DayAug10),
 		),
 	)
 }
@@ -47,13 +44,12 @@ func createStartPlanningTool() mcp.Tool {
 func handleStartPlanning(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	day, err := request.RequireString("day")
 	if err != nil || !IsValidDay(day) {
-		return mcp.NewToolResultError("Error: day must be 'Aug9' or 'Aug10'"), nil
+		return mcp.NewToolResultError("Error: day must be '" + DayAug9 + "' or '" + DayAug10 + "'"), nil
 	}
 
-	callReason := request.GetString("callReason", "")
 
 	// Generate a secure session ID
-	dayCode := map[string]string{"Aug9": "09", "Aug10": "10"}[day]
+	dayCode := map[string]string{DayAug9: "09", DayAug10: "10"}[day]
 	sessionID := GenerateSessionIDWithCollisionCheck(dayCode)
 
 	// Convert day format and create new user state
@@ -68,13 +64,13 @@ func handleStartPlanning(ctx context.Context, request mcp.CallToolRequest) (*mcp
 
 	data := map[string]any{
 		"day":     internalDay,
-		"options": removeAbstractFromSessions(firstSessions),
+		"options": firstSessions,
 	}
 
 	message := fmt.Sprintf("Started planning schedule for %s, session ID: %s. Please show these %d sessions grouped by topic tags. For each session, show basic info (code, title, time, room, speaker, difficulty). Remind users they can ask for details about any session by providing the session code.",
 		internalDay, sessionID, len(firstSessions))
 
-	response := buildStandardResponse(sessionID, data, message, callReason)
+	response := buildStandardResponse(sessionID, data, message)
 
 	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
 }
@@ -90,24 +86,20 @@ func createChooseSessionTool() mcp.Tool {
 		mcp.WithString("sessionCode",
 			mcp.Description("The session code that user selected"),
 		),
-		mcp.WithString("callReason",
-			mcp.Description("Explain what the user selected and why you want to record this choice"),
-		),
 	)
 }
 
 func handleChooseSession(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	sessionID, err := request.RequireString("sessionId")
 	if err != nil {
-		return mcp.NewToolResultError("Error: sessionId is required"), nil
+		return mcp.NewToolResultError(ErrSessionIDRequired.Error()), nil
 	}
 
 	sessionCode, err := request.RequireString("sessionCode")
 	if err != nil {
-		return mcp.NewToolResultError("Error: sessionCode is required"), nil
+		return mcp.NewToolResultError(ErrSessionCodeRequired.Error()), nil
 	}
 
-	callReason := request.GetString("callReason", "")
 
 	// Add session to user's schedule
 	if err = AddSessionToSchedule(sessionID, sessionCode); err != nil {
@@ -134,16 +126,16 @@ func handleChooseSession(ctx context.Context, request mcp.CallToolRequest) (*mcp
 			nextMessage = "No more sessions available to choose from at this time."
 		}
 	} else {
-		nextMessage = fmt.Sprintf("Selection recorded! You have %d available sessions to choose from. IMPORTANT: Display ALL sessions from next_options. Group sessions by their tags for better organization. Include session code, title, time, room, and speaker for each session. Users can request detailed information for any session by providing its code.", len(recommendations))
+		nextMessage = fmt.Sprintf("Selection recorded! You have %d available sessions to choose from. COUNT VERIFICATION: You must display exactly %d sessions - verify this count. Do NOT use ellipsis (...) or 'and X more sessions' or any abbreviation. Group sessions by their tags but show EVERY SINGLE session with code, title, time, room, speaker, and URL. Show URLs as clickable links. Users can request detailed information for any session by providing its code.", len(recommendations), len(recommendations))
 	}
 
 	data := map[string]any{
 		"selected_session": selectedSession,
-		"next_options":     removeAbstractFromSessions(recommendations),
+		"next_options":     recommendations,
 		"is_complete":      IsScheduleComplete(sessionID),
 	}
 
-	response := buildStandardResponse(sessionID, data, nextMessage, callReason)
+	response := buildStandardResponse(sessionID, data, nextMessage)
 
 	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
 }
@@ -156,23 +148,19 @@ func createGetOptionsTool() mcp.Tool {
 		mcp.WithString("sessionId",
 			mcp.Description("User's session ID"),
 		),
-		mcp.WithString("callReason",
-			mcp.Description("Explain why you need to get options for continuation planning, e.g., user wants to continue selecting sessions after current schedule"),
-		),
 	)
 }
 
 func handleGetOptions(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	sessionID, err := request.RequireString("sessionId")
 	if err != nil {
-		return mcp.NewToolResultError("Error: sessionId is required"), nil
+		return mcp.NewToolResultError(ErrSessionIDRequired.Error()), nil
 	}
 
-	callReason := request.GetString("callReason", "")
 
 	state := GetUserState(sessionID)
 	if state == nil {
-		return mcp.NewToolResultError("Error: cannot find specified session"), nil
+		return mcp.NewToolResultError(ErrCannotFindSession.Error()), nil
 	}
 
 	recommendations, err := GetRecommendations(sessionID)
@@ -184,17 +172,16 @@ func handleGetOptions(ctx context.Context, request mcp.CallToolRequest) (*mcp.Ca
 	if len(recommendations) == 0 {
 		message = "No sessions currently available to choose from. May have completed today's planning or no more suitable timeslots available."
 	} else {
-		message = fmt.Sprintf("Found %d available sessions for your next timeslot. IMPORTANT: Display ALL sessions from the options array. Group sessions by their tags for better organization. Include session code, title, time, room, and speaker for each session. Consider user interests: %v. Users can request detailed information for any session by providing its code.", len(recommendations), state.Profile)
+		message = fmt.Sprintf("Found %d available sessions for your next timeslot. COUNT VERIFICATION: You must display exactly %d sessions - verify this count. Do NOT use ellipsis (...) or 'and X more sessions' or any abbreviation. Group sessions by their tags but show EVERY SINGLE session with code, title, time, room, speaker, and URL. Show URLs as clickable links. Based on the user's previous selections, try to highlight sessions that might interest them. Users can request detailed information for any session by providing its code.", len(recommendations), len(recommendations))
 	}
 
 	data := map[string]any{
-		"options":                removeAbstractFromSessions(recommendations),
-		"user_profile":           state.Profile,
+		"options":                recommendations,
 		"last_end_time":          state.LastEndTime,
 		"current_schedule_count": len(state.Schedule),
 	}
 
-	response := buildStandardResponse(sessionID, data, message, callReason)
+	response := buildStandardResponse(sessionID, data, message)
 
 	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
 }
@@ -206,9 +193,6 @@ func createGetScheduleTool() mcp.Tool {
 		mcp.WithDescription(sessionIdWarning+"Get user's complete planned schedule timeline for a specific day. Use this tool when user wants to view their current planned agenda, check their complete schedule, or review their selected sessions in chronological order. Returns a well-formatted timeline view with session details, time gaps, and schedule statistics."),
 		mcp.WithString("sessionId",
 			mcp.Description("User's session ID"),
-		),
-		mcp.WithString("callReason",
-			mcp.Description("Briefly explain why you need to get the schedule, e.g., user wants to view complete timeline"),
 		),
 	)
 }
@@ -237,9 +221,6 @@ If user hasn't planned their schedule yet, guide them to use start_planning to b
 		mcp.WithString("sessionId",
 			mcp.Description("User's session ID"),
 		),
-		mcp.WithString("callReason",
-			mcp.Description("Explain why you are calling this tool, e.g., user asks what's next in their current schedule"),
-		),
 	)
 }
 
@@ -251,9 +232,6 @@ func createGetSessionDetailTool() mcp.Tool {
 		mcp.WithString("sessionCode",
 			mcp.Description("The session code to get details for"),
 		),
-		mcp.WithString("callReason",
-			mcp.Description("Explain why you need the session details"),
-		),
 	)
 }
 
@@ -264,9 +242,6 @@ func createFinishPlanningTool() mcp.Tool {
 		mcp.WithDescription(sessionIdWarning+"User wants to finish planning and complete their schedule. Use this tool when user explicitly says they want to end planning or when you ask and they confirm they're satisfied with current schedule. This marks their planning as completed and prevents further 'planning_available' status from appearing."),
 		mcp.WithString("sessionId",
 			mcp.Description("User's session ID"),
-		),
-		mcp.WithString("callReason",
-			mcp.Description("Explain why user wants to finish planning"),
 		),
 	)
 }
@@ -288,9 +263,6 @@ func createGetRoomScheduleTool() mcp.Tool {
 		mcp.WithString("current_only",
 			mcp.Description("Set to 'true' to return only the currently running session"),
 		),
-		mcp.WithString("callReason",
-			mcp.Description("Explain why you need room schedule information"),
-		),
 	)
 }
 
@@ -299,9 +271,6 @@ func createGetVenueMapTool() mcp.Tool {
 	return mcp.NewTool(
 		"get_venue_map",
 		mcp.WithDescription("Get venue map and navigation information. Use this tool when user asks about directions, venue locations, how to get around campus, or needs visual map guidance. Returns official COSCUP venue map URL with building layouts and navigation details."),
-		mcp.WithString("callReason",
-			mcp.Description("Explain why you need venue map information, e.g., user asks for directions"),
-		),
 	)
 }
 
@@ -310,23 +279,19 @@ func createHelpTool() mcp.Tool {
 	return mcp.NewTool(
 		"help",
 		mcp.WithDescription("Get user-friendly help about COSCUP planning operations and usage examples. Use this tool when user asks for help, wants to know what they can do, or needs usage guidance. Provides practical examples and operation categories rather than technical tool lists."),
-		mcp.WithString("callReason",
-			mcp.Description("Explain why you are calling this tool and what help the user needs"),
-		),
 	)
 }
 
 func handleGetSchedule(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	sessionID, err := request.RequireString("sessionId")
 	if err != nil {
-		return mcp.NewToolResultError("Error: sessionId is required"), nil
+		return mcp.NewToolResultError(ErrSessionIDRequired.Error()), nil
 	}
 
-	callReason := request.GetString("callReason", "")
 
 	state := GetUserState(sessionID)
 	if state == nil {
-		return mcp.NewToolResultError("Error: cannot find specified session"), nil
+		return mcp.NewToolResultError(ErrCannotFindSession.Error()), nil
 	}
 
 	// Generate timeline format
@@ -337,7 +302,6 @@ func handleGetSchedule(ctx context.Context, request mcp.CallToolRequest) (*mcp.C
 		"schedule":       state.Schedule,
 		"schedule_count": len(state.Schedule),
 		"last_end_time":  state.LastEndTime,
-		"user_profile":   state.Profile,
 		"is_complete":    IsScheduleComplete(sessionID),
 		"timeline_view":  timeline,
 	}
@@ -345,7 +309,7 @@ func handleGetSchedule(ctx context.Context, request mcp.CallToolRequest) (*mcp.C
 	message := fmt.Sprintf("完整議程時間軸已生成。用戶已選擇 %d 個 session，最後結束時間 %s。請以用戶偏好語言呈現時間軸格式的議程安排。",
 		len(state.Schedule), state.LastEndTime)
 
-	response := buildStandardResponse(sessionID, data, message, callReason)
+	response := buildStandardResponse(sessionID, data, message)
 
 	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
 }
@@ -353,10 +317,9 @@ func handleGetSchedule(ctx context.Context, request mcp.CallToolRequest) (*mcp.C
 func handleGetNextSession(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	sessionID, err := request.RequireString("sessionId")
 	if err != nil {
-		return mcp.NewToolResultError("Error: sessionId is required"), nil
+		return mcp.NewToolResultError(ErrSessionIDRequired.Error()), nil
 	}
 
-	callReason := request.GetString("callReason", "")
 
 	// Get next session information
 	nextInfo, err := GetNextSession(sessionID)
@@ -368,17 +331,15 @@ func handleGetNextSession(ctx context.Context, request mcp.CallToolRequest) (*mc
 	nextInfo["sessionId"] = sessionID
 
 	response := Response{
-		Success:    true,
-		Data:       nextInfo,
-		CallReason: callReason,
-		Message:    nextInfo["message"].(string),
+		Success: true,
+		Data:    nextInfo,
+		Message: nextInfo["message"].(string),
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
 }
 
 func handleGetVenueMap(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	callReason := request.GetString("callReason", "")
 
 	data := map[string]any{
 		"venue_map_url": "https://coscup.org/2025/venue/",
@@ -406,17 +367,15 @@ func handleGetVenueMap(ctx context.Context, request mcp.CallToolRequest) (*mcp.C
 	message := "Official COSCUP 2025 venue map available at https://coscup.org/2025/venue/ - provides interactive campus layout, building details, and navigation guidance. Show this URL to the user and explain they can view detailed maps, room locations, and accessibility information."
 
 	response := Response{
-		Success:    true,
-		Data:       data,
-		CallReason: callReason,
-		Message:    message,
+		Success: true,
+		Data:    data,
+		Message: message,
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
 }
 
 func handleHelp(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	callReason := request.GetString("callReason", "")
 
 	helpContent := `🎯 COSCUP 議程規劃助手使用指南
 
@@ -488,10 +447,9 @@ func handleHelp(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
 
 	// For help, we don't need a specific sessionID
 	response := Response{
-		Success:    true,
-		Data:       data,
-		CallReason: callReason,
-		Message:    message,
+		Success: true,
+		Data:    data,
+		Message: message,
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
@@ -500,10 +458,9 @@ func handleHelp(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
 func handleGetSessionDetail(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	sessionCode, err := request.RequireString("sessionCode")
 	if err != nil {
-		return mcp.NewToolResultError("Error: sessionCode is required"), nil
+		return mcp.NewToolResultError(ErrSessionCodeRequired.Error()), nil
 	}
 
-	callReason := request.GetString("callReason", "")
 
 	// Find the session by code
 	session := FindSessionByCode(sessionCode)
@@ -519,10 +476,9 @@ func handleGetSessionDetail(ctx context.Context, request mcp.CallToolRequest) (*
 
 	// For session detail, we don't have a specific sessionID, so pass empty string
 	response := Response{
-		Success:    true,
-		Data:       data,
-		CallReason: callReason,
-		Message:    message,
+		Success: true,
+		Data:    data,
+		Message: message,
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
@@ -531,20 +487,18 @@ func handleGetSessionDetail(ctx context.Context, request mcp.CallToolRequest) (*
 func handleFinishPlanning(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	sessionID, err := request.RequireString("sessionId")
 	if err != nil {
-		return mcp.NewToolResultError("Error: sessionId is required"), nil
+		return mcp.NewToolResultError(ErrSessionIDRequired.Error()), nil
 	}
 
-	callReason := request.GetString("callReason", "")
 
 	// Check if session exists
 	state := GetUserState(sessionID)
 	if state == nil {
-		return mcp.NewToolResultError("Error: cannot find specified session"), nil
+		return mcp.NewToolResultError(ErrCannotFindSession.Error()), nil
 	}
 
 	// Mark planning as completed
-	err = FinishPlanning(sessionID)
-	if err != nil {
+	if err = FinishPlanning(sessionID); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Error: %s", err.Error())), nil
 	}
 
@@ -559,7 +513,7 @@ func handleFinishPlanning(ctx context.Context, request mcp.CallToolRequest) (*mc
 	message := fmt.Sprintf("🎉 規劃完成！您已成功規劃了 %s 的議程，共選擇 %d 個 session，最後結束時間 %s。您的 COSCUP 2025 行程已確定完成。可以開始期待精彩的議程內容！",
 		state.Day, len(state.Schedule), state.LastEndTime)
 
-	response := buildStandardResponse(sessionID, data, message, callReason)
+	response := buildStandardResponse(sessionID, data, message)
 
 	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil
 }
@@ -567,7 +521,7 @@ func handleFinishPlanning(ctx context.Context, request mcp.CallToolRequest) (*mc
 func handleGetRoomSchedule(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	room, err := request.RequireString("room")
 	if err != nil {
-		return mcp.NewToolResultError("Error: room is required"), nil
+		return mcp.NewToolResultError(ErrRoomRequired.Error()), nil
 	}
 
 	// Use provided day or default to current COSCUP day
@@ -578,12 +532,11 @@ func handleGetRoomSchedule(ctx context.Context, request mcp.CallToolRequest) (*m
 		day = getCOSCUPDay(now)
 	}
 	if !IsValidDay(day) {
-		return mcp.NewToolResultError("Error: day must be 'Aug9' or 'Aug10'"), nil
+		return mcp.NewToolResultError("Error: day must be '" + DayAug9 + "' or '" + DayAug10 + "'"), nil
 	}
 
 	nextOnly := request.GetString("next_only", "") == "true"
 	currentOnly := request.GetString("current_only", "") == "true"
-	callReason := request.GetString("callReason", "")
 
 	// Convert day format
 	internalDay := convertDayFormat(day)
@@ -628,7 +581,7 @@ func handleGetRoomSchedule(ctx context.Context, request mcp.CallToolRequest) (*m
 		"day":            internalDay,
 		"current_time":   currentTime,
 		"mode":           mode,
-		"sessions":       removeAbstractFromSessions(sessions),
+		"sessions":       sessions,
 		"total_sessions": len(roomSessions),
 	}
 
@@ -663,10 +616,9 @@ func handleGetRoomSchedule(ctx context.Context, request mcp.CallToolRequest) (*m
 
 	// For room schedule, we don't have a specific sessionID, so pass empty string to buildStandardResponse
 	response := Response{
-		Success:    true,
-		Data:       data,
-		CallReason: callReason,
-		Message:    message,
+		Success: true,
+		Data:    data,
+		Message: message,
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("%+v", response)), nil

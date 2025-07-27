@@ -49,10 +49,13 @@ func init() {
 }
 
 // FindSessionByCode finds a session by its code
+// Returns a safe copy since allSessions is global data - preserves complete abstract for detailed view
 func FindSessionByCode(code string) *Session {
 	for _, session := range allSessions {
 		if session.Code == code {
-			return &session
+			// Return a copy to protect global data while preserving complete abstract
+			result := session
+			return &result
 		}
 	}
 	return nil
@@ -73,15 +76,15 @@ func GetFirstSession(day string) []Session {
 		}
 	}
 
-	// Return all sessions that start at the earliest time
-	var result []Session
+	// Find all sessions that start at the earliest time
+	var earliestSessions []Session
 	for _, session := range sessions {
 		if session.Start == earliest {
-			result = append(result, session)
+			earliestSessions = append(earliestSessions, session)
 		}
 	}
 
-	return result
+	return getSimplifiedSessions(earliestSessions)
 }
 
 // timeToMinutes converts "HH:MM" to minutes since midnight
@@ -104,16 +107,16 @@ func timeToMinutes(timeStr string) int {
 
 // IsValidDay checks if the given day is valid
 func IsValidDay(day string) bool {
-	return day == "Aug9" || day == "Aug10"
+	return day == DayAug9 || day == DayAug10
 }
 
 // convertDayFormat converts user input format to internal format
 func convertDayFormat(userDay string) string {
 	switch userDay {
-	case "Aug9":
-		return "Aug.9"
-	case "Aug10":
-		return "Aug.10"
+	case DayAug9:
+		return DayFormatAug9
+	case DayAug10:
+		return DayFormatAug10
 	default:
 		return userDay
 	}
