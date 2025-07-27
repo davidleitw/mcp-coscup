@@ -1,0 +1,246 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v0.0.1-beta)'
+        required: true
+        default: 'v0.0.1-beta'
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: |
+          echo "Running all tests..."
+          go test ./...
+
+      - name: Run tests with coverage
+        run: |
+          echo "Running coverage tests..."
+          go test ./mcp -cover -coverprofile=coverage.out
+          go tool cover -func=coverage.out
+
+      - name: Test build
+        run: |
+          echo "Testing build..."
+          go build -v ./cmd/server
+
+  build:
+    name: Build and Release
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            suffix: linux-amd64
+          - goos: linux
+            goarch: arm64
+            suffix: linux-arm64
+          - goos: darwin
+            goarch: amd64
+            suffix: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            suffix: darwin-arm64
+          - goos: windows
+            goarch: amd64
+            suffix: windows-amd64
+            extension: .exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          
+          # Set binary name with extension for Windows
+          binary_name="mcp-coscup"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            binary_name="mcp-coscup.exe"
+          fi
+          
+          # Build the binary
+          echo "Building for ${{ matrix.goos }}/${{ matrix.goarch }}..."
+          go build -ldflags="-s -w" -o "dist/${binary_name}" ./cmd/server
+          
+          # Create archive
+          cd dist
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip "../mcp-coscup-${{ matrix.suffix }}.zip" "${binary_name}"
+            echo "Created: mcp-coscup-${{ matrix.suffix }}.zip"
+          else
+            tar -czf "../mcp-coscup-${{ matrix.suffix }}.tar.gz" "${binary_name}"
+            echo "Created: mcp-coscup-${{ matrix.suffix }}.tar.gz"
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: mcp-coscup-${{ matrix.suffix }}
+          path: |
+            mcp-coscup-${{ matrix.suffix }}.tar.gz
+            mcp-coscup-${{ matrix.suffix }}.zip
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release-assets/ \;
+          
+          # Generate checksums
+          cd release-assets
+          sha256sum * > checksums.txt
+          
+          echo "Release assets:"
+          ls -la
+          cat checksums.txt
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          
+          cat > release_notes.md << EOF
+          # COSCUP MCP Server $VERSION
+          
+          ## 🎯 功能特色
+          
+          - **COSCUP 2025 議程規劃助手** - 智慧安排你的 COSCUP 行程
+          - **Claude Code/Desktop 整合** - 一鍵安裝，直接在 Claude 中使用
+          - **雙模式部署** - 支援本地安裝和雲端服務
+          - **跨平台支援** - Linux, macOS, Windows 全平台支援
+          
+          ## 🚀 快速開始
+          
+          ### 下載對應平台的版本：
+          - **Linux (x64)**: \`mcp-coscup-linux-amd64.tar.gz\`
+          - **Linux (ARM64)**: \`mcp-coscup-linux-arm64.tar.gz\`  
+          - **macOS (Intel)**: \`mcp-coscup-darwin-amd64.tar.gz\`
+          - **macOS (Apple Silicon)**: \`mcp-coscup-darwin-arm64.tar.gz\`
+          - **Windows**: \`mcp-coscup-windows-amd64.zip\`
+          
+          ### 安裝使用：
+          \`\`\`bash
+          # 1. 下載並解壓縮對應平台的檔案
+          tar -xzf mcp-coscup-linux-amd64.tar.gz  # Linux/macOS
+          # unzip mcp-coscup-windows-amd64.zip    # Windows
+          
+          # 2. 安裝到 Claude Code
+          claude mcp add mcp-coscup ./mcp-coscup -s user
+          
+          # 3. 開始使用
+          # 在 Claude Code 中說：「幫我安排 Aug.9 COSCUP 的行程」
+          \`\`\`
+          
+          ## 🛡️ 檔案驗證
+          
+          使用 \`checksums.txt\` 檔案驗證下載的檔案完整性：
+          \`\`\`bash
+          sha256sum -c checksums.txt
+          \`\`\`
+          
+          ## 📚 更多資訊
+          
+          - [完整安裝說明](https://github.com/davidleitw/mcp-coscup#readme)
+          - [雲端服務版本](https://mcp-coscup-scnu6evqhq-de.a.run.app/health)
+          - [問題回報](https://github.com/davidleitw/mcp-coscup/issues)
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: ${{ steps.get_version.outputs.version }}
+          body_path: release_notes.md
+          files: |
+            release-assets/*
+          draft: false
+          prerelease: ${{ contains(steps.get_version.outputs.version, 'beta') || contains(steps.get_version.outputs.version, 'alpha') || contains(steps.get_version.outputs.version, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## 🎉 Release Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "Release **${{ steps.get_version.outputs.version }}** has been created successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Assets:" >> $GITHUB_STEP_SUMMARY
+          echo "- Linux AMD64: \`mcp-coscup-linux-amd64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Linux ARM64: \`mcp-coscup-linux-arm64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- macOS Intel: \`mcp-coscup-darwin-amd64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- macOS Apple Silicon: \`mcp-coscup-darwin-arm64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Windows: \`mcp-coscup-windows-amd64.zip\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Checksums: \`checksums.txt\`" >> $GITHUB_STEP_SUMMARY
