@@ -1,8 +1,8 @@
 package mcp
 
 import (
-	"testing"
 	"mcp-coscup/mcp/testutil"
+	"testing"
 )
 
 // Tests for functions in data.go

@@ -7,27 +7,26 @@ import (
 
 // Session represents a COSCUP session
 type Session struct {
-	Code     string   `json:"code"`
-	Title    string   `json:"title"`
-	Speakers []string `json:"speakers"`
-	Start    string   `json:"start"`
-	End      string   `json:"end"`
-	Track    string   `json:"track"`
-	Abstract string   `json:"abstract"`
-	Language string   `json:"language"`
-	Difficulty string `json:"difficulty"`
-	Room     string   // derived from JSON structure
-	Day      string   // "Aug.9" or "Aug.10"
-	URL      string   `json:"url"` // Official COSCUP session URL
-	Tags     []string `json:"tags"` // Universal tags for categorization
+	Code       string   `json:"code"`
+	Title      string   `json:"title"`
+	Speakers   []string `json:"speakers"`
+	Start      string   `json:"start"`
+	End        string   `json:"end"`
+	Track      string   `json:"track"`
+	Abstract   string   `json:"abstract"`
+	Language   string   `json:"language"`
+	Difficulty string   `json:"difficulty"`
+	Room       string   // derived from JSON structure
+	Day        string   // "Aug.9" or "Aug.10"
+	URL        string   `json:"url"`  // Official COSCUP session URL
+	Tags       []string `json:"tags"` // Universal tags for categorization
 }
-
 
 // Global data storage
 var (
-	allSessions     []Session
-	sessionsByDay   = make(map[string][]Session)
-	sessionsLoaded  = false
+	allSessions    []Session
+	sessionsByDay  = make(map[string][]Session)
+	sessionsLoaded = false
 )
 
 // LoadCOSCUPData loads embedded COSCUP data
@@ -37,15 +36,15 @@ func LoadCOSCUPData() error {
 	}
 
 	// Use embedded data from embedded_data.go
-	for day, rooms := range EmbeddedCOSCUPData {
+	for day, rooms := range COSCUPData {
 		for _, sessions := range rooms {
 			for _, session := range sessions {
 				// Add official COSCUP URL
 				session.URL = "https://coscup.org/2025/sessions/" + session.Code
-				
+
 				// Tags are already defined in embedded_data.go
 				// No need to generate tags - they come from the embedded data
-				
+
 				allSessions = append(allSessions, session)
 				sessionsByDay[day] = append(sessionsByDay[day], session)
 			}
@@ -55,7 +54,6 @@ func LoadCOSCUPData() error {
 	sessionsLoaded = true
 	return nil
 }
-
 
 // FindSessionByCode finds a session by its code
 func FindSessionByCode(code string) *Session {
@@ -114,12 +112,12 @@ func timeToMinutes(timeStr string) int {
 
 	hours, err1 := strconv.Atoi(parts[0])
 	minutes, err2 := strconv.Atoi(parts[1])
-	
+
 	// Validate input range
 	if err1 != nil || err2 != nil || hours < 0 || hours > 23 || minutes < 0 || minutes > 59 {
 		return 0
 	}
-	
+
 	return hours*60 + minutes
 }
 
@@ -139,5 +137,3 @@ func convertDayFormat(userDay string) string {
 		return userDay
 	}
 }
-
-

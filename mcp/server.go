@@ -82,27 +82,3 @@ func (s *COSCUPServer) startCleanupRoutine() {
 		log.Printf("Active sessions: %v", stats["active_sessions"])
 	}
 }
-
-// GetStats returns server statistics
-func (s *COSCUPServer) GetStats() map[string]any {
-	sessionStats := GetSessionStats()
-
-	return map[string]any{
-		"server_name":   "COSCUP Schedule Planner",
-		"version":       "1.0.0",
-		"uptime":        time.Now().Format(time.RFC3339),
-		"session_stats": sessionStats,
-		"available_tools": []string{
-			"start_planning",
-			"choose_session",
-			"get_options",
-			"get_schedule",
-			"get_next_session",
-			"get_session_detail",
-			"finish_planning",
-			"get_room_schedule",
-			"get_venue_map",
-			"help",
-		},
-	}
-}

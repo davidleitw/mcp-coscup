@@ -2,9 +2,9 @@ package mcp
 
 import (
 	"fmt"
+	"mcp-coscup/mcp/testutil"
 	"testing"
 	"time"
-	"mcp-coscup/mcp/testutil"
 )
 
 // Tests for functions in session.go
@@ -119,11 +119,11 @@ func TestFormatSpeakers(t *testing.T) {
 // Route calculation tests
 func TestCalculateRoute(t *testing.T) {
 	tests := []struct {
-		name           string
-		fromSession    *Session
-		toSession      *Session
-		expectedRoute  *RouteInfo
-		shouldBeNil    bool
+		name          string
+		fromSession   *Session
+		toSession     *Session
+		expectedRoute *RouteInfo
+		shouldBeNil   bool
 	}{
 		{
 			name:        "No destination session",
@@ -275,52 +275,52 @@ func TestAnalyzeCurrentStatus(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		currentTime  string
+		name           string
+		currentTime    string
 		expectedStatus string
-		description  string
+		description    string
 	}{
 		{
-			name:         "During first session",
-			currentTime:  "09:15",
+			name:           "During first session",
+			currentTime:    "09:15",
 			expectedStatus: "ongoing",
-			description:  "Should detect ongoing session when current time is within session period",
+			description:    "Should detect ongoing session when current time is within session period",
 		},
 		{
-			name:         "Just after first session",
-			currentTime:  "09:35",
+			name:           "Just after first session",
+			currentTime:    "09:35",
 			expectedStatus: "just_ended",
-			description:  "Should detect just_ended status within 10 minutes of session end",
+			description:    "Should detect just_ended status within 10 minutes of session end",
 		},
 		{
-			name:         "In break between sessions",
-			currentTime:  "09:45",
+			name:           "In break between sessions",
+			currentTime:    "09:45",
 			expectedStatus: "break",
-			description:  "Should detect break status when between sessions",
+			description:    "Should detect break status when between sessions",
 		},
 		{
-			name:         "During second session",
-			currentTime:  "10:15",
+			name:           "During second session",
+			currentTime:    "10:15",
 			expectedStatus: "ongoing",
-			description:  "Should detect ongoing status during second session",
+			description:    "Should detect ongoing status during second session",
 		},
 		{
-			name:         "During third session",
-			currentTime:  "11:15",
+			name:           "During third session",
+			currentTime:    "11:15",
 			expectedStatus: "ongoing",
-			description:  "Should detect ongoing status during third session",
+			description:    "Should detect ongoing status during third session",
 		},
 		{
-			name:         "After all sessions completed",
-			currentTime:  "12:00",
+			name:           "After all sessions completed",
+			currentTime:    "12:00",
 			expectedStatus: "schedule_complete",
-			description:  "Should detect schedule complete after all sessions",
+			description:    "Should detect schedule complete after all sessions",
 		},
 		{
-			name:         "Before first session",
-			currentTime:  "08:30",
+			name:           "Before first session",
+			currentTime:    "08:30",
 			expectedStatus: "break",
-			description:  "Should detect break status before first session",
+			description:    "Should detect break status before first session",
 		},
 	}
 
@@ -383,10 +383,10 @@ func TestAnalyzeCurrentStatusSingleSession(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		currentTime  string
+		name           string
+		currentTime    string
 		expectedStatus string
-		hasNext      bool
+		hasNext        bool
 	}{
 		{"Before single session", "09:30", "break", false},
 		{"During single session", "10:15", "ongoing", false},
@@ -397,7 +397,7 @@ func TestAnalyzeCurrentStatusSingleSession(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := analyzeCurrentStatus(state, tt.currentTime)
 			testutil.AssertEqual(t, tt.expectedStatus, result.Status, "Status should match expected")
-			
+
 			if tt.expectedStatus == "ongoing" {
 				testutil.AssertEqual(t, (*Session)(nil), result.NextSession, "Single session should have no next session")
 			}
@@ -418,7 +418,7 @@ func TestGetNextSessionWithTime(t *testing.T) {
 			Track: "AI Track",
 		},
 		{
-			Code:  "TEST002", 
+			Code:  "TEST002",
 			Title: "Database Session",
 			Start: "10:00",
 			End:   "10:30",
@@ -475,7 +475,7 @@ func TestGetNextSessionWithTime(t *testing.T) {
 		{
 			name:           "Just after first session",
 			mockTime:       "09:35",
-			expectedStatus: "just_ended", 
+			expectedStatus: "just_ended",
 			expectedFields: []string{"next_session", "break_minutes", "route"},
 		},
 		{
@@ -869,7 +869,7 @@ func TestRemoveAbstractFromSessions(t *testing.T) {
 			End:      "10:30",
 		},
 		{
-			Code:     "TEST002", 
+			Code:     "TEST002",
 			Title:    "Test Session 2",
 			Abstract: "Another abstract to be removed",
 			Room:     "RB-105",
@@ -900,7 +900,7 @@ func TestRemoveAbstractFromSessions(t *testing.T) {
 func TestRemoveAbstractFromSessionsEmpty(t *testing.T) {
 	emptySessions := []Session{}
 	result := removeAbstractFromSessions(emptySessions)
-	
+
 	testutil.AssertEqual(t, 0, len(result), "Should handle empty session list")
 }
 
@@ -952,12 +952,12 @@ func TestFinishPlanningNonexistentSession(t *testing.T) {
 func TestCompletePlanningFlow(t *testing.T) {
 	// Create test session
 	testSessionID := "test_complete_flow"
-	
+
 	// Step 1: Create user state (simulating start_planning)
 	state := CreateUserState(testSessionID, "Aug.10")
 	testutil.AssertNotNil(t, state, "Should create user state")
 	testutil.AssertEqual(t, false, state.IsCompleted, "Should start with IsCompleted false")
-	
+
 	// Clean up after test
 	defer func() {
 		shardIndex := getShardIndex(testSessionID)
@@ -965,7 +965,7 @@ func TestCompletePlanningFlow(t *testing.T) {
 		delete(sessionShards[shardIndex].sessions, testSessionID)
 		sessionShards[shardIndex].mu.Unlock()
 	}()
-	
+
 	// Step 2: Add some sessions (simulating choose_session)
 	mockSessions := []Session{
 		{
@@ -977,7 +977,7 @@ func TestCompletePlanningFlow(t *testing.T) {
 			Track: "Test Track",
 		},
 		{
-			Code:  "MOCK002", 
+			Code:  "MOCK002",
 			Title: "Mock Session 2",
 			Start: "10:00",
 			End:   "10:30",
@@ -985,39 +985,39 @@ func TestCompletePlanningFlow(t *testing.T) {
 			Track: "Test Track",
 		},
 	}
-	
+
 	// Add mock sessions to schedule
 	for _, session := range mockSessions {
 		state.Schedule = append(state.Schedule, session)
 		state.LastEndTime = session.End
 		addToProfile(state, session.Track)
 	}
-	
+
 	// Step 3: Test planning_available status detection
 	mockTimeProvider := testutil.NewMockTimeProvider("11:00") // After all sessions
 	result, err := GetNextSessionWithTime(testSessionID, mockTimeProvider)
-	
+
 	testutil.AssertNoError(t, err, "Should not return error")
 	testutil.AssertNotNil(t, result, "Result should not be nil")
-	
+
 	// Should trigger planning_available since IsCompleted is false and no real session data
 	status, ok := result["status"].(string)
 	testutil.AssertEqual(t, true, ok, "Status should be string")
 	// In test environment without sessionsLoaded, should return schedule_complete
 	testutil.AssertEqual(t, "schedule_complete", status, "Should return schedule_complete in test environment")
-	
+
 	// Step 4: Finish planning
 	err = FinishPlanning(testSessionID)
 	testutil.AssertNoError(t, err, "Should finish planning successfully")
-	
+
 	// Step 5: Verify completed state prevents planning_available
 	result2, err := GetNextSessionWithTime(testSessionID, mockTimeProvider)
 	testutil.AssertNoError(t, err, "Should not return error after finishing")
-	
+
 	status2, ok := result2["status"].(string)
 	testutil.AssertEqual(t, true, ok, "Status should be string")
 	testutil.AssertEqual(t, "schedule_complete", status2, "Should stay schedule_complete after finishing")
-	
+
 	// Verify state is marked completed
 	finalState := GetUserState(testSessionID)
 	testutil.AssertEqual(t, true, finalState.IsCompleted, "Final state should be completed")
@@ -1026,12 +1026,12 @@ func TestCompletePlanningFlow(t *testing.T) {
 func TestPlanningAvailableStatusTrigger(t *testing.T) {
 	// This test verifies when planning_available status should trigger
 	testSessionID := "test_planning_available"
-	
+
 	// Create state with minimal sessions
 	state := &UserState{
-		SessionID:    testSessionID,
-		Day:          "Aug.10",
-		Schedule:     []Session{
+		SessionID: testSessionID,
+		Day:       "Aug.10",
+		Schedule: []Session{
 			{
 				Code:  "EARLY001",
 				Title: "Early Session",
@@ -1046,20 +1046,20 @@ func TestPlanningAvailableStatusTrigger(t *testing.T) {
 		CreatedAt:    time.Now(),
 		LastActivity: time.Now(),
 	}
-	
+
 	// Store test state
 	shardIndex := getShardIndex(testSessionID)
 	sessionShards[shardIndex].mu.Lock()
 	sessionShards[shardIndex].sessions[testSessionID] = state
 	sessionShards[shardIndex].mu.Unlock()
-	
+
 	// Clean up after test
 	defer func() {
 		sessionShards[shardIndex].mu.Lock()
 		delete(sessionShards[shardIndex].sessions, testSessionID)
 		sessionShards[shardIndex].mu.Unlock()
 	}()
-	
+
 	tests := []struct {
 		name           string
 		currentTime    string
@@ -1074,20 +1074,20 @@ func TestPlanningAvailableStatusTrigger(t *testing.T) {
 		},
 		{
 			name:           "After session with available slots",
-			currentTime:    "10:00", 
+			currentTime:    "10:00",
 			expectedStatus: "schedule_complete", // In test env without sessionsLoaded
 			description:    "Should check for available sessions after completing planned ones",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockTimeProvider := testutil.NewMockTimeProvider(tt.currentTime)
 			result, err := GetNextSessionWithTime(testSessionID, mockTimeProvider)
-			
+
 			testutil.AssertNoError(t, err, "Should not return error")
 			testutil.AssertNotNil(t, result, "Result should not be nil")
-			
+
 			status, ok := result["status"].(string)
 			testutil.AssertEqual(t, true, ok, "Status should be string")
 			testutil.AssertEqual(t, tt.expectedStatus, status, tt.description)
@@ -1098,12 +1098,12 @@ func TestPlanningAvailableStatusTrigger(t *testing.T) {
 func TestGetNextSessionAfterFinishPlanning(t *testing.T) {
 	// Test that get_next_session behaves correctly after finish_planning
 	testSessionID := "test_after_finish"
-	
+
 	// Create completed state
 	state := &UserState{
-		SessionID:    testSessionID,
-		Day:          "Aug.10",
-		Schedule:     []Session{
+		SessionID: testSessionID,
+		Day:       "Aug.10",
+		Schedule: []Session{
 			{
 				Code:  "SESSION001",
 				Title: "Completed Session",
@@ -1118,34 +1118,34 @@ func TestGetNextSessionAfterFinishPlanning(t *testing.T) {
 		CreatedAt:    time.Now(),
 		LastActivity: time.Now(),
 	}
-	
+
 	// Store test state
 	shardIndex := getShardIndex(testSessionID)
 	sessionShards[shardIndex].mu.Lock()
 	sessionShards[shardIndex].sessions[testSessionID] = state
 	sessionShards[shardIndex].mu.Unlock()
-	
+
 	// Clean up after test
 	defer func() {
 		sessionShards[shardIndex].mu.Lock()
 		delete(sessionShards[shardIndex].sessions, testSessionID)
 		sessionShards[shardIndex].mu.Unlock()
 	}()
-	
+
 	// Test various times after completion
 	times := []string{"10:00", "12:00", "15:00"}
-	
+
 	for _, currentTime := range times {
 		mockTimeProvider := testutil.NewMockTimeProvider(currentTime)
 		result, err := GetNextSessionWithTime(testSessionID, mockTimeProvider)
-		
+
 		testutil.AssertNoError(t, err, "Should not return error")
 		testutil.AssertNotNil(t, result, "Result should not be nil")
-		
+
 		status, ok := result["status"].(string)
 		testutil.AssertEqual(t, true, ok, "Status should be string")
 		testutil.AssertEqual(t, "schedule_complete", status, "Should always return schedule_complete after finishing")
-		
+
 		// Should never return planning_available
 		testutil.AssertEqual(t, false, status == "planning_available", "Should never return planning_available after finishing")
 	}
@@ -1162,15 +1162,15 @@ func TestFinishPlanningWithDifferentScheduleSizes(t *testing.T) {
 		{"One session", 1, "Should finish with minimal schedule"},
 		{"Multiple sessions", 3, "Should finish with full schedule"},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			testSessionID := fmt.Sprintf("test_finish_%d_sessions", tc.sessionCount)
-			
+
 			// Create state with specified number of sessions
 			schedule := make([]Session, tc.sessionCount)
 			lastEndTime := "08:00"
-			
+
 			for i := 0; i < tc.sessionCount; i++ {
 				startHour := 9 + i
 				endHour := startHour
@@ -1184,7 +1184,7 @@ func TestFinishPlanningWithDifferentScheduleSizes(t *testing.T) {
 				}
 				lastEndTime = schedule[i].End
 			}
-			
+
 			state := &UserState{
 				SessionID:    testSessionID,
 				Day:          "Aug.10",
@@ -1195,24 +1195,24 @@ func TestFinishPlanningWithDifferentScheduleSizes(t *testing.T) {
 				CreatedAt:    time.Now(),
 				LastActivity: time.Now(),
 			}
-			
+
 			// Store test state
 			shardIndex := getShardIndex(testSessionID)
 			sessionShards[shardIndex].mu.Lock()
 			sessionShards[shardIndex].sessions[testSessionID] = state
 			sessionShards[shardIndex].mu.Unlock()
-			
+
 			// Clean up after test
 			defer func() {
 				sessionShards[shardIndex].mu.Lock()
 				delete(sessionShards[shardIndex].sessions, testSessionID)
 				sessionShards[shardIndex].mu.Unlock()
 			}()
-			
+
 			// Test finishing planning
 			err := FinishPlanning(testSessionID)
 			testutil.AssertNoError(t, err, tc.description)
-			
+
 			// Verify completion
 			finalState := GetUserState(testSessionID)
 			testutil.AssertEqual(t, true, finalState.IsCompleted, "Should mark as completed")
@@ -1227,7 +1227,7 @@ func TestFindRoomSessions(t *testing.T) {
 	// Mock session data for testing
 	originalSessionsByDay := sessionsByDay
 	originalSessionsLoaded := sessionsLoaded
-	
+
 	// Setup test data
 	sessionsByDay = map[string][]Session{
 		"Aug.9": {
@@ -1240,7 +1240,7 @@ func TestFindRoomSessions(t *testing.T) {
 				Track: "AI",
 			},
 			{
-				Code:  "TR211-002", 
+				Code:  "TR211-002",
 				Title: "AI Session 2",
 				Start: "10:00",
 				End:   "10:30",
@@ -1276,13 +1276,13 @@ func TestFindRoomSessions(t *testing.T) {
 		},
 	}
 	sessionsLoaded = true
-	
+
 	// Restore original data after test
 	defer func() {
 		sessionsByDay = originalSessionsByDay
 		sessionsLoaded = originalSessionsLoaded
 	}()
-	
+
 	tests := []struct {
 		name          string
 		day           string
@@ -1332,32 +1332,32 @@ func TestFindRoomSessions(t *testing.T) {
 			description:   "Should return empty for non-existent day",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := FindRoomSessions(tt.day, tt.room)
-			
+
 			testutil.AssertEqual(t, tt.expectedCount, len(result), tt.description)
-			
+
 			// Check order if we have sessions
 			for i, expectedCode := range tt.expectedOrder {
 				if i < len(result) {
-					testutil.AssertEqual(t, expectedCode, result[i].Code, 
+					testutil.AssertEqual(t, expectedCode, result[i].Code,
 						fmt.Sprintf("Session %d should have code %s", i, expectedCode))
 				}
 			}
-			
+
 			// Verify sessions are sorted by start time
 			for i := 1; i < len(result); i++ {
 				prevStartMin := timeToMinutes(result[i-1].Start)
 				currStartMin := timeToMinutes(result[i].Start)
-				testutil.AssertEqual(t, true, prevStartMin <= currStartMin, 
+				testutil.AssertEqual(t, true, prevStartMin <= currStartMin,
 					"Sessions should be sorted by start time")
 			}
-			
+
 			// Verify all returned sessions are for the correct room
 			for _, session := range result {
-				testutil.AssertEqual(t, tt.room, session.Room, 
+				testutil.AssertEqual(t, tt.room, session.Room,
 					"All sessions should be for the specified room")
 			}
 		})
@@ -1376,7 +1376,7 @@ func TestGetCurrentRoomSession(t *testing.T) {
 		},
 		{
 			Code:  "CURRENT-002",
-			Title: "Mid Session", 
+			Title: "Mid Session",
 			Start: "10:00",
 			End:   "10:30",
 			Room:  "TEST-ROOM",
@@ -1389,21 +1389,21 @@ func TestGetCurrentRoomSession(t *testing.T) {
 			Room:  "TEST-ROOM",
 		},
 	}
-	
+
 	// Mock FindRoomSessions to return our test data
 	originalSessionsByDay := sessionsByDay
 	originalSessionsLoaded := sessionsLoaded
-	
+
 	sessionsByDay = map[string][]Session{
 		"TestDay": testSessions,
 	}
 	sessionsLoaded = true
-	
+
 	defer func() {
 		sessionsByDay = originalSessionsByDay
 		sessionsLoaded = originalSessionsLoaded
 	}()
-	
+
 	tests := []struct {
 		name         string
 		currentTime  string
@@ -1461,16 +1461,16 @@ func TestGetCurrentRoomSession(t *testing.T) {
 			description:  "Should find afternoon session",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := GetCurrentRoomSession("TEST-ROOM", "TestDay", tt.currentTime)
-			
+
 			if tt.expectNil {
 				testutil.AssertEqual(t, (*Session)(nil), result, tt.description)
 			} else {
 				testutil.AssertNotNil(t, result, tt.description)
-				testutil.AssertEqual(t, tt.expectedCode, result.Code, 
+				testutil.AssertEqual(t, tt.expectedCode, result.Code,
 					"Should return session with correct code")
 			}
 		})
@@ -1490,7 +1490,7 @@ func TestGetNextRoomSession(t *testing.T) {
 		{
 			Code:  "NEXT-002",
 			Title: "Mid Session",
-			Start: "10:00", 
+			Start: "10:00",
 			End:   "10:30",
 			Room:  "TEST-ROOM",
 		},
@@ -1502,21 +1502,21 @@ func TestGetNextRoomSession(t *testing.T) {
 			Room:  "TEST-ROOM",
 		},
 	}
-	
+
 	// Mock FindRoomSessions
 	originalSessionsByDay := sessionsByDay
 	originalSessionsLoaded := sessionsLoaded
-	
+
 	sessionsByDay = map[string][]Session{
 		"TestDay": testSessions,
 	}
 	sessionsLoaded = true
-	
+
 	defer func() {
 		sessionsByDay = originalSessionsByDay
 		sessionsLoaded = originalSessionsLoaded
 	}()
-	
+
 	tests := []struct {
 		name         string
 		currentTime  string
@@ -1581,11 +1581,11 @@ func TestGetNextRoomSession(t *testing.T) {
 			description:  "Should return nil when after all sessions",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := GetNextRoomSession("TEST-ROOM", "TestDay", tt.currentTime)
-			
+
 			if tt.expectNil {
 				testutil.AssertEqual(t, (*Session)(nil), result, tt.description)
 			} else {
@@ -1599,28 +1599,28 @@ func TestGetNextRoomSession(t *testing.T) {
 
 func TestRoomScheduleEdgeCases(t *testing.T) {
 	// Test edge cases for room schedule functions
-	
+
 	// Test with empty session data
 	originalSessionsByDay := sessionsByDay
 	originalSessionsLoaded := sessionsLoaded
-	
+
 	sessionsByDay = map[string][]Session{}
 	sessionsLoaded = true
-	
+
 	defer func() {
 		sessionsByDay = originalSessionsByDay
 		sessionsLoaded = originalSessionsLoaded
 	}()
-	
+
 	t.Run("Empty session data", func(t *testing.T) {
 		// Test FindRoomSessions with no data
 		result := FindRoomSessions("Aug.9", "TR211")
 		testutil.AssertEqual(t, 0, len(result), "Should return empty slice for no data")
-		
+
 		// Test GetCurrentRoomSession with no data
 		current := GetCurrentRoomSession("TR211", "Aug.9", "10:00")
 		testutil.AssertEqual(t, (*Session)(nil), current, "Should return nil for no data")
-		
+
 		// Test GetNextRoomSession with no data
 		next := GetNextRoomSession("TR211", "Aug.9", "10:00")
 		testutil.AssertEqual(t, (*Session)(nil), next, "Should return nil for no data")
@@ -1638,20 +1638,20 @@ func TestRoomScheduleTimeEdgeCases(t *testing.T) {
 			Room:  "EDGE-ROOM",
 		},
 	}
-	
+
 	originalSessionsByDay := sessionsByDay
 	originalSessionsLoaded := sessionsLoaded
-	
+
 	sessionsByDay = map[string][]Session{
 		"EdgeDay": testSessions,
 	}
 	sessionsLoaded = true
-	
+
 	defer func() {
 		sessionsByDay = originalSessionsByDay
 		sessionsLoaded = originalSessionsLoaded
 	}()
-	
+
 	tests := []struct {
 		name        string
 		currentTime string
@@ -1702,17 +1702,17 @@ func TestRoomScheduleTimeEdgeCases(t *testing.T) {
 			description: "Should not find next session at end of last session",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var result *Session
-			
+
 			if tt.testFunc == "current" {
 				result = GetCurrentRoomSession("EDGE-ROOM", "EdgeDay", tt.currentTime)
 			} else {
 				result = GetNextRoomSession("EDGE-ROOM", "EdgeDay", tt.currentTime)
 			}
-			
+
 			if tt.expectFound {
 				testutil.AssertNotNil(t, result, tt.description)
 				testutil.AssertEqual(t, "EDGE-001", result.Code, "Should find the test session")
@@ -1735,7 +1735,7 @@ func TestRoomScheduleMultipleRoomsData(t *testing.T) {
 		},
 		{
 			Code:  "RB105-A",
-			Title: "RB105 Session A", 
+			Title: "RB105 Session A",
 			Start: "09:15",
 			End:   "09:45",
 			Room:  "RB-105",
@@ -1755,63 +1755,63 @@ func TestRoomScheduleMultipleRoomsData(t *testing.T) {
 			Room:  "AU",
 		},
 	}
-	
+
 	originalSessionsByDay := sessionsByDay
 	originalSessionsLoaded := sessionsLoaded
-	
+
 	sessionsByDay = map[string][]Session{
 		"MixedDay": mixedSessions,
 	}
 	sessionsLoaded = true
-	
+
 	defer func() {
 		sessionsByDay = originalSessionsByDay
 		sessionsLoaded = originalSessionsLoaded
 	}()
-	
+
 	t.Run("Filter TR211 sessions", func(t *testing.T) {
 		result := FindRoomSessions("MixedDay", "TR211")
 		testutil.AssertEqual(t, 2, len(result), "Should find exactly 2 TR211 sessions")
-		
+
 		// Verify all sessions are TR211
 		for _, session := range result {
 			testutil.AssertEqual(t, "TR211", session.Room, "All sessions should be TR211")
 		}
-		
+
 		// Verify correct order
 		testutil.AssertEqual(t, "TR211-A", result[0].Code, "First should be TR211-A")
 		testutil.AssertEqual(t, "TR211-B", result[1].Code, "Second should be TR211-B")
 	})
-	
+
 	t.Run("Filter RB-105 sessions", func(t *testing.T) {
 		result := FindRoomSessions("MixedDay", "RB-105")
 		testutil.AssertEqual(t, 1, len(result), "Should find exactly 1 RB-105 session")
 		testutil.AssertEqual(t, "RB105-A", result[0].Code, "Should be RB105-A")
 	})
-	
+
 	t.Run("Current session filtering", func(t *testing.T) {
 		// At 09:20, should find different sessions in different rooms
 		tr211Current := GetCurrentRoomSession("TR211", "MixedDay", "09:20")
 		testutil.AssertNotNil(t, tr211Current, "Should find TR211 session at 09:20")
 		testutil.AssertEqual(t, "TR211-A", tr211Current.Code, "Should be TR211-A")
-		
+
 		rb105Current := GetCurrentRoomSession("RB-105", "MixedDay", "09:20")
 		testutil.AssertNotNil(t, rb105Current, "Should find RB-105 session at 09:20")
 		testutil.AssertEqual(t, "RB105-A", rb105Current.Code, "Should be RB105-A")
-		
+
 		auCurrent := GetCurrentRoomSession("AU", "MixedDay", "09:20")
 		testutil.AssertEqual(t, (*Session)(nil), auCurrent, "Should not find AU session at 09:20")
 	})
-	
+
 	t.Run("Next session filtering", func(t *testing.T) {
 		// At 09:20, next sessions should be different for each room
 		tr211Next := GetNextRoomSession("TR211", "MixedDay", "09:20")
 		testutil.AssertNotNil(t, tr211Next, "Should find next TR211 session")
 		testutil.AssertEqual(t, "TR211-B", tr211Next.Code, "Next TR211 should be TR211-B")
-		
+
 		rb105Next := GetNextRoomSession("RB-105", "MixedDay", "09:20")
 		testutil.AssertEqual(t, (*Session)(nil), rb105Next, "Should not find next RB-105 session")
-		
+
 		auNext := GetNextRoomSession("AU", "MixedDay", "09:20")
 		testutil.AssertNotNil(t, auNext, "Should find next AU session")
 		testutil.AssertEqual(t, "AU-A", auNext.Code, "Next AU should be AU-A")
