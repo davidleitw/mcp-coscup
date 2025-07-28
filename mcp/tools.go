@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -523,6 +524,10 @@ func handleGetRoomSchedule(ctx context.Context, request mcp.CallToolRequest) (*m
 		timeProvider := &RealTimeProvider{}
 		now := timeProvider.Now()
 		day = getCOSCUPDay(now)
+		// If not during COSCUP, default to Aug9 for historical data queries
+		if day == StatusOutsideCOSCUP {
+			day = DayAug9
+		}
 	}
 	if !IsValidDay(day) {
 		return mcp.NewToolResultError("Error: day must be '" + DayAug9 + "' or '" + DayAug10 + "'"), nil
@@ -587,6 +592,15 @@ func handleGetRoomSchedule(ctx context.Context, request mcp.CallToolRequest) (*m
 	}
 
 	var message string
+	
+	// Convert to Taipei timezone (UTC+8)
+	taipeiLoc := time.FixedZone("GMT+8", 8*60*60)
+	taipeiTime := now.In(taipeiLoc)
+	
+	// Check if current date is during COSCUP (2025/8/9-10)
+	isDuringCOSCUP := (taipeiTime.Year() == COSCUPYear && taipeiTime.Month() == COSCUPMonth && 
+		(taipeiTime.Day() == COSCUPDay1 || taipeiTime.Day() == COSCUPDay2))
+	
 	switch mode {
 	case "next_only":
 		if nextSession != nil {
@@ -600,7 +614,12 @@ func handleGetRoomSchedule(ctx context.Context, request mcp.CallToolRequest) (*m
 			message = fmt.Sprintf("房間 %s 現在正在進行：%s-%s 「%s」",
 				room, currentSession.Start, currentSession.End, currentSession.Title)
 		} else {
-			message = fmt.Sprintf("房間 %s 現在沒有議程進行中", room)
+			if !isDuringCOSCUP {
+				message = fmt.Sprintf("房間 %s 現在沒有議程進行中。\n\n⏰ 目前時間：%s (台北時區)\n❌ 目前非 COSCUP 2025 主辦時間\n📅 COSCUP 2025 舉辦日期：8月9日-10日\n💡 此查詢顯示的是 %s 的歷史議程資料", 
+					room, taipeiTime.Format("2006年1月2日 15:04"), internalDay)
+			} else {
+				message = fmt.Sprintf("房間 %s 現在沒有議程進行中", room)
+			}
 		}
 	default:
 		message = fmt.Sprintf("房間 %s 在 %s 共有 %d 場議程。已按時間順序排列，請以用戶偏好語言呈現完整的房間議程時間表。",
