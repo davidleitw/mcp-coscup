@@ -83,7 +83,7 @@ claude mcp remove coscup-remote -s user
 3. **填入連接資訊**
    - **名稱**: `mcp-coscup`
    - **URL**: `https://mcp-coscup-scnu6evqhq-de.a.run.app/mcp`
-   - OAuth Client ID 和 Secret 留空即可
+   - 不需要設定 OAuth (留空即可)
 
 4. **點擊「Add」完成設定**
 
