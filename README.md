@@ -15,6 +15,38 @@
 2. **會議當天** - 問 AI「what's next」，它會根據你事先安排的行程和現在時間，告訴你現在該在哪、下一場在哪邊、怎麼走、要花多少時間
 3. **即時查詢** - 想知道「TR211 現在在講什麼」或「TR412 下一場議程是什麼」，直接問就好
 
+## 🎯 實際使用效果
+
+**完成規劃後的完整議程：**
+
+<img src="images/8448.png" alt="完整議程安排" width="300"/>
+
+**規劃完成並獲得提醒：**
+
+<img src="images/8449.png" alt="規劃完成提醒" width="300"/>
+
+安排完行程後，系統會：
+- 顯示完整的議程統計和時間安排
+- 提供貼心提醒（用餐時間、空檔時間等）
+- 給你一個專屬的 session ID 用於後續查詢
+
+**會議當天的即時查詢：**
+
+<img src="images/8450.png" alt="即時查詢功能" width="300"/>
+
+安排完之後就可以隨時問 AI 各種問題：
+- 「下一場議程是什麼？」
+- 「TR212 現在在講什麼？」  
+- 「我還有多久到下一場？」
+- 「怎麼走到 RB105？」
+
+**⚠️ 使用提醒：**
+- 安排行程本身會消耗較多 token
+- 互動過程會有些慢，請耐心等待
+- 建議一次完成整天的規劃，避免重複安排
+
+---
+
 ## 怎麼使用？
 
 我們提供雲端 MCP 服務，支援多種 Claude 客戶端：
@@ -108,9 +140,102 @@ claude mcp remove coscup-remote -s user
 
 ### 💻 方式二：本地安裝
 
-如果你想要本地運行或進行開發：
+如果你想要本地運行或進行開發，有兩種方式：
 
-#### **需要什麼**
+#### **📦 下載預編譯版本（最簡單）**
+
+不需要安裝 Go 開發環境，直接下載現成的程式：
+
+**需要什麼**
+- Claude Code 或 Claude Desktop ([點這裡下載](https://claude.ai/download))
+
+**🚀 安裝步驟**
+
+1. **下載對應系統的程式**
+   - 前往 [Releases 頁面](https://github.com/davidleitw/mcp-coscup/releases)
+   - 選擇最新版本下載：
+     - **macOS (Intel)**: `mcp-coscup-darwin-amd64`
+     - **macOS (Apple Silicon)**: `mcp-coscup-darwin-arm64`
+     - **Linux**: `mcp-coscup-linux-amd64`
+     - **Windows**: `mcp-coscup-windows-amd64.exe`
+
+2. **設定執行權限**
+   
+   **macOS/Linux:**
+   ```bash
+   # 下載後設定執行權限
+   chmod +x mcp-coscup-*
+   
+   # 移動到方便的位置（可選）
+   mkdir -p ~/.local/bin
+   mv mcp-coscup-* ~/.local/bin/mcp-coscup
+   ```
+   
+   **Windows:**
+   ```cmd
+   # 下載 .exe 檔案後，可直接執行
+   # 建議移動到固定位置，例如：
+   mkdir C:\mcp-tools
+   move mcp-coscup-windows-amd64.exe C:\mcp-tools\mcp-coscup.exe
+   ```
+
+3. **註冊到 Claude**
+   
+   **macOS/Linux:**
+   ```bash
+   # 使用完整路徑註冊
+   claude mcp add mcp-coscup /path/to/mcp-coscup -s user
+   
+   # 如果移動到 ~/.local/bin
+   claude mcp add mcp-coscup ~/.local/bin/mcp-coscup -s user
+   ```
+   
+   **Windows:**
+   ```cmd
+   # 使用完整路徑註冊
+   claude mcp add mcp-coscup C:\mcp-tools\mcp-coscup.exe -s user
+   ```
+
+4. **Claude Desktop 用戶額外設定**
+   
+   如果使用 Claude Desktop，需要手動編輯配置檔：
+   
+   **配置檔位置：**
+   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
+   
+   **配置內容範例：**
+   ```json
+   {
+     "mcpServers": {
+       "mcp-coscup": {
+         "command": "/Users/你的用戶名/.local/bin/mcp-coscup"
+       }
+     }
+   }
+   ```
+   
+   **Windows 用戶配置範例：**
+   ```json
+   {
+     "mcpServers": {
+       "mcp-coscup": {
+         "command": "C:\\mcp-tools\\mcp-coscup.exe"
+       }
+     }
+   }
+   ```
+
+5. **測試安裝**
+   ```
+   你：幫我安排 Aug.9 COSCUP 的行程
+   ```
+
+#### **⚙️ 從原始碼編譯**
+
+如果你想要進行開發或修改：
+
+**需要什麼**
 - Claude Code 或 Claude Desktop ([點這裡下載](https://claude.ai/download))
 - Git 和 Go 開發環境
 
@@ -180,43 +305,71 @@ claude mcp add mcp-coscup ./bin/mcp-coscup -s user
 
 **事先規劃行程：**
 
-用「幫我安排 Aug.9 COSCUP 的行程」或「幫我安排 Aug.10 COSCUP 的行程」開始：
+用「幫我規劃8/9coscup的行程」開始：
 
 ```
-你：幫我安排 Aug.9 COSCUP 的行程
+你：幫我規劃8/9coscup的行程
 
-AI：好的！Aug.9 有以下議程可以選擇：
+AI：我來幫您規劃 8/9 COSCUP 的行程！讓我先為您開始規劃這一天的議程安排。
 
-10:10-10:40 時段：
-• TR212 「透過 gRPC-Gateway 使用 Go 構建 RESTful API」
-• RB105 「開源專案管理實戰」  
-• AU 「資安防護入門」
+太好了！我已經為您建立了 8/9 的行程規劃。您的個人議程 ID 是：user_09_1753703252_004b857ec0b158e5
 
-11:10-11:40 時段：
-• TR212 「Golang clean arch framework for beginners」
-• RB102 「AI 模型部署與 ONNX Runtime」
+**開幕主題演講**
+W3BES9 - COSCUP 2025: Welcome Day 1
+時間：09:00-09:35
+地點：RB105
+講者：COSCUP Team
+語言：漢語
 
-你想參加哪些議程？
+這是 COSCUP 2025 第一天的開幕式，建議您參加來了解整個活動的安排和精神！
 
-你：我要兩個 Golang 議程
+接下來您想選擇哪個時段的議程呢？您可以：
+• 直接告訴我議程代碼（如：W3BES9）來選擇
+• 或者說「我要選這個」來選擇開幕式
+• 想了解更多議程細節，請提供議程代碼
 
-AI：好的！已經安排到你的行程裡：
-✓ 10:10-10:40 TR212 「透過 gRPC-Gateway 使用 Go 構建 RESTful API」  
-✓ 11:10-11:40 TR212 「Golang clean arch framework for beginners」
+您想要參加開幕式嗎？還是想看看其他時段有什麼選項？
+
+你：參加開幕式
+
+AI：太好了！已經為您選擇了開幕式。您的議程 ID：user_09_1753703252_004b857ec0b158e5
+
+現在讓我為您展示接下來可以選擇的 25 個議程，按主題分類：
+[繼續展示更多議程選項...]
 ```
 
-**會議當天導航：**
+**會議當天查詢下一場議程：**
 ```
-你：what's next
+你：下一場議程是？
 
-AI：你目前正在 TR212 參加「透過 gRPC-Gateway 使用 Go 構建 RESTful API」，還有 15 分鐘結束。
+AI：讓我幫您查看下一場議程的資訊！
 
-下一場：11:10-11:40 在 TR212 「Golang clean arch framework for beginners」
+**您的下一場議程**
 
-下一場議程就在同一個房間，可以繼續留在 TR212！
+目前狀態：您正在 TR412-2 參加「為什麼CoT 有用？ From RAG to MCP Agent」，還有 7 分鐘結束。
+
+**下一場議程**
+時間：10:40-11:10 (30分鐘)
+地點：TR514
+議程：The basics of Writer that you can learn by enjoying! If you want to migrate, start with Writer!
+講者：K.Ito, Yuuichi Kojima
+軌道：OSC Japan - Open Source People Network Japan
+
+**移動指引**
+路線：TR412-2 → TR514 (同在研揚大樓內)
+預估時間：2 分鐘 (實際可能需要更久)
+移動時間：10:30-10:40 (10分鐘空檔)
+
+**建議**
+• 當前議程還有 7 分鐘，可以專心聽完
+• 結束後有 10 分鐘時間移動，時間充裕
+• 兩個教室都在同一棟建築內，移動很方便
+• 如果需要可以順便上洗手間或喝水
+
+您目前的時間安排很順利！
 ```
 
-**即時查詢：**
+**其他即時查詢：**
 ```
 你：TR212 現在在講什麼？
 
@@ -230,6 +383,7 @@ AI：TR212 下一場議程：
 ```
 
 就是這麼簡單，像聊天一樣輕鬆管理你的 COSCUP 行程。
+
 
 ---
 
@@ -252,32 +406,41 @@ open "~/Library/Application Support/Claude/"
 ```
 
 #### ❓ **HTTP 遠端連線失敗**
-如果雲端服務連線有問題，可以：
-1. 確認網址是否正確：`https://mcp-coscup-scnu6evqhq-de.a.run.app/mcp`
-2. 測試服務是否正常：在瀏覽器開啟 `https://mcp-coscup-scnu6evqhq-de.a.run.app/health`
-3. 重新安裝：`claude mcp remove coscup-remote -s user` 然後重新 `claude mcp add ...`
-4. 改用本地安裝模式：`make install-local`
+```bash
+# 重新安裝遠端服務
+claude mcp remove coscup-remote -s user
+claude mcp add --transport http coscup-remote https://mcp-coscup-scnu6evqhq-de.a.run.app/mcp -s user
+
+# 或改用本地安裝
+make install-local
+```
 
 #### ❓ **Claude Code 指令無法使用**
 ```bash
-# 檢查 Claude Code 是否安裝
+# 檢查是否已安裝
 which claude
-
-# 如果沒有，請下載安裝
-open https://claude.ai/download
 
 # 確認 MCP 狀態
 claude mcp list
 ```
 
-#### ❓ **本地安裝編譯失敗**
+#### ❓ **Binary 下載版本無法執行**
 ```bash
-# 確認 Go 版本
-go version  # 需要 1.21+
+# macOS/Linux: 確認執行權限
+chmod +x mcp-coscup-*
 
-# 清理並重新編譯
-make clean
-make build
+# 測試程式是否正常
+./mcp-coscup-* --help  # macOS/Linux
+mcp-coscup.exe --help  # Windows
+```
+
+#### ❓ **從原始碼編譯失敗**
+```bash
+# 確認 Go 版本 (需要 1.21+)
+go version
+
+# 重新編譯
+make clean && make build
 ```
 
 
@@ -285,7 +448,35 @@ make build
 
 ## 🚀 想要貢獻開發？
 
-這是一個開源專案，歡迎大家一起來改進！不管你是 Go 新手還是老手，都可以輕鬆上手。
+歡迎大家貢獻想做的功能或提出 issue！
+
+### 🤝 歡迎一起改進！
+
+不管你是：
+- **想要新功能** - 在 [Issues](https://github.com/davidleitw/mcp-coscup/issues) 告訴我們你希望有什麼功能
+- **發現 Bug** - 實際使用時遇到問題，歡迎回報！ 
+- **想寫程式** - 直接來個 Pull Request
+
+**🚧 目前想要加的功能：**
+
+- **批量議程建立** - 讓用戶可以一次輸入一連串的議程代碼（如：`W3BES9,ABC123,DEF456`），系統直接幫忙建立完整行程。這樣可以避免來回交互浪費太多 token，適合已經知道想參加哪些議程的用戶。
+
+- **行程分享功能** - 開發一個分享工具，讓後端回傳特定的 prompt，這樣 LLM 就能讀取朋友已經建立的行程表。用戶可以分享自己的行程安排，或查看朋友的規劃作為參考。
+
+- **議程共筆連結** - 想要加上獲得某個議程共筆的功能，但是現在連結還沒有出來，還在思考是要開一個獨立的 MCP tool 還是在現有的工具中多回傳這個資訊（理論上 LLM 能把資訊抽出來）。
+
+有興趣的人歡迎來討論或貢獻這些功能！
+
+**提交程式改動：**
+1. Fork 這個 repo
+2. 開個新 branch: `git checkout -b feature/我的新功能`
+3. 寫程式 + 測試: `make test && make install-local`
+4. Commit + Push
+5. 開 Pull Request
+
+**我們希望這個工具能真正幫助到參加 COSCUP 的會眾，讓大家在會場能更輕鬆地安排行程、找到想聽的議程！**
+
+有任何想法都歡迎分享，一起讓 COSCUP 體驗變得更好！
 
 ### 📦 開發環境設定
 
@@ -296,7 +487,7 @@ make build
 **任何平台都可以：**
 - 🐧 Linux
 - 🍎 macOS (Intel 和 Apple Silicon 都支援)
-- 🪟 Windows
+- 💻 Windows
 
 ### 🔧 開始開發
 
@@ -422,23 +613,6 @@ make uninstall-local
 make install-local
 ```
 
-### 🤝 歡迎一起改進！
-
-不管你是：
-- 🔧 **想要新功能** - 在 [Issues](https://github.com/davidleitw/mcp-coscup/issues) 告訴我們你希望有什麼功能
-- 🐛 **發現 Bug** - 實際使用時遇到問題，歡迎回報！ 
-- 💻 **想寫程式** - 直接來個 Pull Request
-
-**提交程式改動：**
-1. Fork 這個 repo
-2. 開個新 branch: `git checkout -b feature/我的新功能`
-3. 寫程式 + 測試: `make test && make install-local`
-4. Commit + Push
-5. 開 Pull Request
-
-**我們希望這個工具能真正幫助到參加 COSCUP 的會眾，讓大家在會場能更輕鬆地安排行程、找到想聽的議程！** 🎯
-
-有任何想法都歡迎分享，一起讓 COSCUP 體驗變得更好！ 🎉
 
 ## 授權
 
