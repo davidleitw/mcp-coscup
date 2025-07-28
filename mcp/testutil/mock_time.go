@@ -20,7 +20,7 @@ func NewMockTimeProvider(timeStr string) *MockTimeProvider {
 		// Default to 10:23 if parsing fails
 		parsedTime, _ = time.Parse("15:04", "10:23")
 	}
-	
+
 	// Set to COSCUP 2025 Aug 9 with the specified time
 	fixedTime := time.Date(2025, 8, 9, parsedTime.Hour(), parsedTime.Minute(), 0, 0, time.UTC)
 	return &MockTimeProvider{fixedTime: fixedTime}
@@ -32,7 +32,7 @@ func NewMockTimeProviderWithDay(timeStr, day string) *MockTimeProvider {
 	if err != nil {
 		parsedTime, _ = time.Parse("15:04", "10:23")
 	}
-	
+
 	var fixedTime time.Time
 	switch day {
 	case "Aug9":
@@ -43,7 +43,7 @@ func NewMockTimeProviderWithDay(timeStr, day string) *MockTimeProvider {
 		// Outside COSCUP period - use 2025/8/8 as example
 		fixedTime = time.Date(2025, 8, 8, parsedTime.Hour(), parsedTime.Minute(), 0, 0, time.UTC)
 	}
-	
+
 	return &MockTimeProvider{fixedTime: fixedTime}
 }
 

@@ -918,7 +918,7 @@ func TestFindSessionByCodeReturnsCopy(t *testing.T) {
 	// Test that FindSessionByCode returns a safe copy, not a pointer to global data
 	session1 := FindSessionByCode("FKNDCY")
 	session2 := FindSessionByCode("FKNDCY")
-	
+
 	if session1 == nil || session2 == nil {
 		t.Skip("Session FKNDCY not found - skipping copy test")
 		return
@@ -939,7 +939,6 @@ func TestFindSessionByCodeReturnsCopy(t *testing.T) {
 	session1.Title = "Modified Title"
 	testutil.AssertEqual(t, originalTitle, session2.Title, "Modifying one copy should not affect another")
 }
-
 
 func TestFinishPlanning(t *testing.T) {
 	// Create a test session

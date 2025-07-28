@@ -4,7 +4,7 @@ import "errors"
 
 // 標準錯誤定義
 var (
-	ErrSessionNotFound      = errors.New("session not found")
+	ErrSessionNotFound     = errors.New("session not found")
 	ErrInvalidDay          = errors.New("invalid day format")
 	ErrInvalidSessionCode  = errors.New("invalid session code")
 	ErrSessionIDRequired   = errors.New("sessionId is required")

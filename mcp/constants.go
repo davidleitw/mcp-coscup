@@ -10,23 +10,23 @@ const (
 
 // 系統配置常數
 const (
-	DefaultNumShards     = 16
-	SessionCleanupHours  = 24
-	LongSessionMinutes   = 240 // 4 hours
+	DefaultNumShards    = 16
+	SessionCleanupHours = 24
+	LongSessionMinutes  = 240 // 4 hours
 )
 
 // 場地移動時間常數 (分鐘)
 const (
 	SameBuildingWalkTime = 1
-	AUToRBWalkTime      = 2
-	AUToTRWalkTime      = 4
-	RBToAUWalkTime      = 2
-	RBToRBWalkTime      = 1
-	RBToTRWalkTime      = 3
-	TRToAUWalkTime      = 4
-	TRToRBWalkTime      = 3
-	TRInternalWalkTime  = 2
-	UnknownWalkTime     = 5 // Default for unknown routes
+	AUToRBWalkTime       = 2
+	AUToTRWalkTime       = 4
+	RBToAUWalkTime       = 2
+	RBToRBWalkTime       = 1
+	RBToTRWalkTime       = 3
+	TRToAUWalkTime       = 4
+	TRToRBWalkTime       = 3
+	TRInternalWalkTime   = 2
+	UnknownWalkTime      = 5 // Default for unknown routes
 )
 
 // 字串常數

@@ -47,7 +47,6 @@ func handleStartPlanning(ctx context.Context, request mcp.CallToolRequest) (*mcp
 		return mcp.NewToolResultError("Error: day must be '" + DayAug9 + "' or '" + DayAug10 + "'"), nil
 	}
 
-
 	// Generate a secure session ID
 	dayCode := map[string]string{DayAug9: "09", DayAug10: "10"}[day]
 	sessionID := GenerateSessionIDWithCollisionCheck(dayCode)
@@ -99,7 +98,6 @@ func handleChooseSession(ctx context.Context, request mcp.CallToolRequest) (*mcp
 	if err != nil {
 		return mcp.NewToolResultError(ErrSessionCodeRequired.Error()), nil
 	}
-
 
 	// Add session to user's schedule
 	if err = AddSessionToSchedule(sessionID, sessionCode); err != nil {
@@ -156,7 +154,6 @@ func handleGetOptions(ctx context.Context, request mcp.CallToolRequest) (*mcp.Ca
 	if err != nil {
 		return mcp.NewToolResultError(ErrSessionIDRequired.Error()), nil
 	}
-
 
 	state := GetUserState(sessionID)
 	if state == nil {
@@ -288,7 +285,6 @@ func handleGetSchedule(ctx context.Context, request mcp.CallToolRequest) (*mcp.C
 		return mcp.NewToolResultError(ErrSessionIDRequired.Error()), nil
 	}
 
-
 	state := GetUserState(sessionID)
 	if state == nil {
 		return mcp.NewToolResultError(ErrCannotFindSession.Error()), nil
@@ -319,7 +315,6 @@ func handleGetNextSession(ctx context.Context, request mcp.CallToolRequest) (*mc
 	if err != nil {
 		return mcp.NewToolResultError(ErrSessionIDRequired.Error()), nil
 	}
-
 
 	// Get next session information
 	nextInfo, err := GetNextSession(sessionID)
@@ -461,7 +456,6 @@ func handleGetSessionDetail(ctx context.Context, request mcp.CallToolRequest) (*
 		return mcp.NewToolResultError(ErrSessionCodeRequired.Error()), nil
 	}
 
-
 	// Find the session by code
 	session := FindSessionByCode(sessionCode)
 	if session == nil {
@@ -489,7 +483,6 @@ func handleFinishPlanning(ctx context.Context, request mcp.CallToolRequest) (*mc
 	if err != nil {
 		return mcp.NewToolResultError(ErrSessionIDRequired.Error()), nil
 	}
-
 
 	// Check if session exists
 	state := GetUserState(sessionID)

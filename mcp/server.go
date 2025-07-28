@@ -116,21 +116,21 @@ func (s *COSCUPServer) StartHTTP() error {
 
 	// Create a custom HTTP server with both MCP and health endpoints
 	mux := http.NewServeMux()
-	
+
 	// Add health check endpoints
 	mux.HandleFunc("/health", s.healthHandler)
 	mux.HandleFunc("/", s.healthHandler) // Also respond to root path
-	
+
 	// Add OAuth discovery endpoints for Claude Code compatibility
 	mux.HandleFunc("/.well-known/openid_configuration", s.oauthConfigHandler)
 	mux.HandleFunc("/oauth/authorize", s.oauthAuthorizeHandler)
 	mux.HandleFunc("/oauth/token", s.oauthTokenHandler)
-	
+
 	// Create StreamableHTTP server with custom endpoint path
 	httpServer := server.NewStreamableHTTPServer(s.mcpServer,
 		server.WithEndpointPath("/mcp"),
 	)
-	
+
 	// Handle MCP endpoints with connection logging
 	mux.Handle("/mcp", s.loggingMiddleware(httpServer))
 	mux.Handle("/mcp/", s.loggingMiddleware(httpServer))
@@ -159,7 +159,7 @@ func (s *COSCUPServer) oauthConfigHandler(w http.ResponseWriter, r *http.Request
 			baseURL = "https://localhost:8080"
 		}
 	}
-	
+
 	config := fmt.Sprintf(`{
 		"issuer": "%s",
 		"authorization_endpoint": "%s/oauth/authorize",
@@ -169,7 +169,7 @@ func (s *COSCUPServer) oauthConfigHandler(w http.ResponseWriter, r *http.Request
 		"code_challenge_methods_supported": ["S256"],
 		"scopes_supported": ["openid", "mcp"]
 	}`, baseURL, baseURL, baseURL)
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(config))
@@ -181,15 +181,15 @@ func (s *COSCUPServer) oauthAuthorizeHandler(w http.ResponseWriter, r *http.Requ
 	clientID := r.URL.Query().Get("client_id")
 	redirectURI := r.URL.Query().Get("redirect_uri")
 	state := r.URL.Query().Get("state")
-	
+
 	if redirectURI == "" {
 		http.Error(w, "Missing redirect_uri", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Generate a simple authorization code (in production, this should be secure)
 	authCode := "coscup_auth_code_" + clientID
-	
+
 	redirectURL := fmt.Sprintf("%s?code=%s&state=%s", redirectURI, authCode, state)
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
@@ -200,22 +200,22 @@ func (s *COSCUPServer) oauthTokenHandler(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	
+
 	// Parse form data
 	r.ParseForm()
 	grantType := r.Form.Get("grant_type")
 	code := r.Form.Get("code")
-	
+
 	if grantType != "authorization_code" {
 		http.Error(w, "Unsupported grant type", http.StatusBadRequest)
 		return
 	}
-	
+
 	if code == "" {
 		http.Error(w, "Missing authorization code", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Return a simple access token (in production, this should be a proper JWT)
 	tokenResponse := `{
 		"access_token": "coscup_access_token",
@@ -223,7 +223,7 @@ func (s *COSCUPServer) oauthTokenHandler(w http.ResponseWriter, r *http.Request)
 		"expires_in": 3600,
 		"scope": "mcp"
 	}`
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(tokenResponse))
@@ -234,10 +234,10 @@ func (s *COSCUPServer) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		log.Printf("[HTTP] %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
-		
+
 		// Call the next handler
 		next.ServeHTTP(w, r)
-		
+
 		duration := time.Since(start)
 		log.Printf("[HTTP] %s %s completed in %v", r.Method, r.URL.Path, duration)
 	})
