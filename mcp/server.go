@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/mark3labs/mcp-go/server"
@@ -13,6 +15,17 @@ import (
 // COSCUPServer represents the COSCUP MCP server
 type COSCUPServer struct {
 	mcpServer *server.MCPServer
+}
+
+// getAvailableToolsList dynamically generates a list of available tools
+func getAvailableToolsList() string {
+	tools := CreateMCPTools()
+	var toolNames []string
+	for name := range tools {
+		toolNames = append(toolNames, name)
+	}
+	sort.Strings(toolNames)
+	return strings.Join(toolNames, ", ")
 }
 
 // NewCOSCUPServer creates a new COSCUP MCP server instance
@@ -44,7 +57,7 @@ func (s *COSCUPServer) Start() error {
 	go s.startCleanupRoutine()
 
 	log.Println("COSCUP MCP Server is ready!")
-	log.Println("Available tools: start_planning, choose_session, get_options, get_schedule, get_next_session, get_session_detail, finish_planning, get_room_schedule, get_venue_map, help")
+	log.Printf("Available tools: %s", getAvailableToolsList())
 
 	// Start serving (this will block)
 	return server.ServeStdio(s.mcpServer)
@@ -98,7 +111,7 @@ func (s *COSCUPServer) StartHTTP() error {
 	}
 
 	log.Println("COSCUP MCP Server is ready!")
-	log.Println("Available tools: start_planning, choose_session, get_options, get_schedule, get_next_session, get_session_detail, finish_planning, get_room_schedule, get_venue_map, help")
+	log.Printf("Available tools: %s", getAvailableToolsList())
 	log.Printf("Starting HTTP server on port %s", port)
 
 	// Create a custom HTTP server with both MCP and health endpoints

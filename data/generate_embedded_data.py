@@ -188,9 +188,9 @@ const (
 	TagSideProject = "SideProject"
 )
 
-// EmbeddedCOSCUPData contains hardcoded COSCUP 2025 session data
+// COSCUPData contains COSCUP 2025 session data
 // Generated from coscup_2025_by_day_room.json
-var EmbeddedCOSCUPData = map[string]map[string][]Session{
+var COSCUPData = map[string]map[string][]Session{
 '''
     
     # Process each day

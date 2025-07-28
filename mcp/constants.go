@@ -6,8 +6,6 @@ const (
 	COSCUPMonth = 8
 	COSCUPDay1  = 9
 	COSCUPDay2  = 10
-	DemoHour    = 10
-	DemoMinute  = 23
 )
 
 // 系統配置常數
