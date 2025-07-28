@@ -236,6 +236,13 @@ func addToProfile(state *UserState, track string) {
 	state.Profile = append(state.Profile, track)
 }
 
+// sortSessionsByStartTime sorts sessions by start time using efficient sort.Slice
+func sortSessionsByStartTime(sessions []Session) {
+	sort.Slice(sessions, func(i, j int) bool {
+		return timeToMinutes(sessions[i].Start) < timeToMinutes(sessions[j].Start)
+	})
+}
+
 // getSimplifiedSessions creates safe copies of sessions and clears fields not needed for list display
 func getSimplifiedSessions(sessions []Session) []Session {
 	// Create safe copies since sessionsByDay is global data - avoid modifying original sessions
@@ -275,15 +282,7 @@ func FindNextAvailableInEachRoom(day, afterTime string, userSchedule []Session) 
 		// Sort sessions in this room by start time
 		roomSessionsSorted := make([]Session, len(sessions))
 		copy(roomSessionsSorted, sessions)
-
-		// Simple bubble sort by start time
-		for i := range roomSessionsSorted {
-			for j := i + 1; j < len(roomSessionsSorted); j++ {
-				if timeToMinutes(roomSessionsSorted[i].Start) > timeToMinutes(roomSessionsSorted[j].Start) {
-					roomSessionsSorted[i], roomSessionsSorted[j] = roomSessionsSorted[j], roomSessionsSorted[i]
-				}
-			}
-		}
+		sortSessionsByStartTime(roomSessionsSorted)
 
 		// Find the first available session in this room
 		for _, session := range roomSessionsSorted {
@@ -455,15 +454,7 @@ func generateTimelineView(state *UserState) string {
 	// Sort schedule by start time
 	sortedSchedule := make([]Session, len(state.Schedule))
 	copy(sortedSchedule, state.Schedule)
-
-	// Simple bubble sort by start time
-	for i := range sortedSchedule {
-		for j := i + 1; j < len(sortedSchedule); j++ {
-			if timeToMinutes(sortedSchedule[i].Start) > timeToMinutes(sortedSchedule[j].Start) {
-				sortedSchedule[i], sortedSchedule[j] = sortedSchedule[j], sortedSchedule[i]
-			}
-		}
-	}
+	sortSessionsByStartTime(sortedSchedule)
 
 	timeline := fmt.Sprintf("您的 %s 議程安排\n\n", state.Day)
 
@@ -604,12 +595,12 @@ type TimeProvider interface {
 	Now() time.Time
 }
 
-// RealTimeProvider implements TimeProvider - for demo/testing returns fixed COSCUP time
+// RealTimeProvider implements TimeProvider using actual system time
 type RealTimeProvider struct{}
 
 func (r *RealTimeProvider) Now() time.Time {
-	// For demo/testing, always return COSCUP demo time
-	return time.Date(COSCUPYear, COSCUPMonth, COSCUPDay1, DemoHour, DemoMinute, 0, 0, time.UTC)
+	// Return actual current time
+	return time.Now()
 }
 
 // MockTimeProvider for testing with custom time
@@ -665,14 +656,7 @@ func analyzeCurrentStatus(state *UserState, currentTime string) *SessionStatus {
 	// Sort schedule by start time
 	sortedSchedule := make([]Session, len(state.Schedule))
 	copy(sortedSchedule, state.Schedule)
-
-	for i := range sortedSchedule {
-		for j := i + 1; j < len(sortedSchedule); j++ {
-			if timeToMinutes(sortedSchedule[i].Start) > timeToMinutes(sortedSchedule[j].Start) {
-				sortedSchedule[i], sortedSchedule[j] = sortedSchedule[j], sortedSchedule[i]
-			}
-		}
-	}
+	sortSessionsByStartTime(sortedSchedule)
 
 	// Find current and next sessions
 	var currentSession, nextSession *Session
