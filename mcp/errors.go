@@ -2,7 +2,7 @@ package mcp
 
 import "errors"
 
-// 標準錯誤定義
+// Standard error definitions
 var (
 	ErrSessionNotFound     = errors.New("session not found")
 	ErrInvalidDay          = errors.New("invalid day format")

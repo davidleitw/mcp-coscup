@@ -1,6 +1,6 @@
 package mcp
 
-// COSCUP 2025 活動相關常數
+// COSCUP 2025 event constants
 const (
 	COSCUPYear  = 2025
 	COSCUPMonth = 8
@@ -8,14 +8,14 @@ const (
 	COSCUPDay2  = 10
 )
 
-// 系統配置常數
+// System configuration constants
 const (
 	DefaultNumShards    = 16
 	SessionCleanupHours = 24
 	LongSessionMinutes  = 240 // 4 hours
 )
 
-// 場地移動時間常數 (分鐘)
+// Venue walking time constants (minutes)
 const (
 	SameBuildingWalkTime = 1
 	AUToRBWalkTime       = 2
@@ -29,7 +29,7 @@ const (
 	UnknownWalkTime      = 5 // Default for unknown routes
 )
 
-// 字串常數
+// String constants
 const (
 	DayAug9             = "Aug9"
 	DayAug10            = "Aug10"
@@ -39,7 +39,7 @@ const (
 	StatusOutsideCOSCUP = "OutsideCOSCUP"
 )
 
-// 建築物代碼
+// Building codes
 const (
 	BuildingAU = "AU"
 	BuildingRB = "RB"
