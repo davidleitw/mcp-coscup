@@ -49,96 +49,116 @@
 
 ## 怎麼使用？
 
-我們提供雲端 MCP 服務，支援多種 Claude 客戶端：
+> **⚠️ 重要通知 (2025-07-31)**：
+> 
+> 雲端 MCP 服務目前暫時下線維護中。經分析發現 MCP 協議需要維持長連接來接收服務器推送，在 Cloud Run 環境下產生了預期外的資源消耗。我們正在評估更合適的部署架構和連接管理策略。
+> 
+> **現在請使用本地安裝版本**，我們會盡快恢復雲端服務。感謝大家的理解和支持！
+
+### 💻 本地安裝（目前推薦方式）
+
+由於雲端服務暫時下線，建議使用以下本地安裝方式：
+
+#### **📦 下載預編譯版本（最簡單）**
+
+不需要安裝 Go 開發環境，直接下載現成的程式：
+
+**需要什麼**
+- Claude Code 或 Claude Desktop ([點這裡下載](https://claude.ai/download))
+
+**🚀 安裝步驟**
+
+1. **下載對應系統的程式**
+   - 前往 [Releases 頁面](https://github.com/davidleitw/mcp-coscup/releases)
+   - 選擇最新版本下載：
+     - **macOS (Intel)**: `mcp-coscup-darwin-amd64`
+     - **macOS (Apple Silicon)**: `mcp-coscup-darwin-arm64`
+     - **Linux**: `mcp-coscup-linux-amd64`
+     - **Windows**: `mcp-coscup-windows-amd64.exe`
+
+2. **設定執行權限並註冊到 Claude**
+   
+   **macOS/Linux:**
+   ```bash
+   # 下載後設定執行權限
+   chmod +x mcp-coscup-*
+   
+   # 註冊到 Claude Code
+   claude mcp add mcp-coscup ./mcp-coscup-* -s user
+   ```
+   
+   **Windows:**
+   ```cmd
+   # 註冊到 Claude Code
+   claude mcp add mcp-coscup ./mcp-coscup-windows-amd64.exe -s user
+   ```
+
+3. **Claude Desktop 用戶額外設定**
+   
+   編輯配置檔：
+   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
+   
+   **配置內容：**
+   ```json
+   {
+     "mcpServers": {
+       "mcp-coscup": {
+         "command": "/path/to/your/mcp-coscup-binary"
+       }
+     }
+   }
+   ```
+
+4. **測試安裝**
+   ```
+   你：幫我安排 Aug.9 COSCUP 的行程
+   ```
+
+#### **⚙️ 從原始碼編譯**
+
+```bash
+# 1. 下載專案
+git clone https://github.com/davidleitw/mcp-coscup.git
+cd mcp-coscup
+
+# 2. 一鍵安裝本地版本
+make install-local
+
+# 如果要移除
+make uninstall-local
+```
+
+---
+
+<details>
+<summary>🔧 雲端服務相關資訊（目前暫停使用）</summary>
+
+以下是雲端服務的設定方式，待服務恢復後可參考使用：
 
 ### 💻 Claude Code（命令行工具）
 
-**🚀 一行指令安裝（最簡單）**
-
 ```bash
-# 安裝遠端 MCP 服務
+# 安裝遠端 MCP 服務（暫時無法使用）
 claude mcp add --transport http coscup-remote https://mcp-coscup-scnu6evqhq-de.a.run.app/mcp -s user
-
-# 如果要移除
-claude mcp remove coscup-remote -s user
 ```
 
 ### 📱 Claude Desktop（桌面應用）
 
-#### **Step 1: 下載 Claude Desktop**
-前往 [Claude Desktop](https://claude.ai/download) 下載並安裝
-
-#### **Step 2: 設定 MCP 連接**
-
-**🎯 使用 UI 界面設定（推薦）**
-
 1. **開啟設定頁面**
-   - **macOS**: `Claude Desktop` → `Settings` → `Developer`
+   - **macOS**: `Claude Desktop` → `Settings` → `Connectors`
    - **Windows**: `File` → `Settings` → `Connectors`
 
 2. **點擊「Add custom connector」**
-   
-   <img src="images/claude_desktop.png" alt="Claude Desktop MCP 設定界面" width="400"/>
 
 3. **填入連接資訊**
    - **名稱**: `mcp-coscup`
-   - **URL**: `https://mcp-coscup-scnu6evqhq-de.a.run.app/mcp`
+   - **URL**: `https://mcp-coscup-scnu6evqhq-de.a.run.app/mcp`（暫時無法使用）
    - 不需要設定 OAuth (留空即可)
 
-4. **點擊「Add」完成設定**
-
-<details>
-<summary>📝 手動編輯配置檔（備用方法）</summary>
-
-如果 UI 界面不可用，可以手動編輯配置檔：
-
-**配置檔位置：**
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
-
-**配置內容：**
-```json
-{
-  "mcpServers": {
-    "coscup-remote": {
-      "command": "npx",
-      "args": [
-        "@anthropic-ai/mcp-client-http",
-        "https://mcp-coscup-scnu6evqhq-de.a.run.app/mcp"
-      ]
-    }
-  }
-}
-```
-
-設定完成後重啟 Claude Desktop。
+**注意**：上述雲端設定目前無法使用，請改用本地安裝版本。
 
 </details>
-
-### 🔗 其他 MCP 兼容工具
-
-我們的 MCP 服務遵循標準協議，理論上支援所有 MCP 兼容的客戶端。
-
-**服務端點**: `https://mcp-coscup-scnu6evqhq-de.a.run.app/mcp`
-
-如果你在使用其他工具（如自製的 MCP 客戶端、第三方整合工具等），歡迎：
-- 📝 提交 Issue 分享你的使用經驗
-- 🔧 貢獻設定說明到我們的文檔
-- 💡 告訴我們需要什麼額外支援
-
-### ✅ 測試設定
-
-設定完成後，試試這個指令：
-
-```
-你：幫我安排 Aug.9 COSCUP 的行程
-```
-
-如果看到 Claude 開始顯示議程選項，就表示設定成功了！
-
----
-
-### 💻 方式二：本地安裝
 
 如果你想要本地運行或進行開發，有兩種方式：
 
